@@ -40,17 +40,12 @@ export const DELIVERY_ACTIVE_STATUSES: readonly DeliveryStatus[] = [
   "Arrived",
 ];
 
-export function isTerminalStatus(
-  type: RequestType,
-  status: string,
-): boolean {
+export function isTerminalStatus(type: RequestType, status: string): boolean {
   switch (type) {
     case "refill":
       return (REFILL_TERMINAL_STATUSES as readonly string[]).includes(status);
     case "complaint":
-      return (COMPLAINT_TERMINAL_STATUSES as readonly string[]).includes(
-        status,
-      );
+      return (COMPLAINT_TERMINAL_STATUSES as readonly string[]).includes(status);
     case "enquiry":
       return (ENQUIRY_TERMINAL_STATUSES as readonly string[]).includes(status);
   }
@@ -60,5 +55,7 @@ export function isTerminalStatus(
 export const CUSTOMER_CANCELABLE_STATUSES = [
   "Submitted",
   "Received",
-  "Under Review",
+  "UnderReview",
 ] as const;
+
+export * from "./transitions";
