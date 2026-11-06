@@ -1,0 +1,20 @@
+{
+  "name": "throne-of-grace-lpg",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Throne of Grace Integrated Ventures — LPG Customer Service & Operations Management Platform",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "dev:web": "pnpm --filter @togi/web dev",
+    "dev:admin": "pnpm --filter @togi/admin dev",
+    "dev:api": "pnpm --filter @togi/api dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

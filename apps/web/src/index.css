@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/*
+ * SCAFFOLD TOKENS — replace with Throne of Grace Integrated Ventures brand assets.
+ * No permanent palette is chosen. Final visual design is derived from the actual
+ * company logo, colours and typography when supplied.
+ * See planning document v1.2 §1.1.
+ */
+:root {
+  --background: #ffffff; /* SCAFFOLD — brand surface */
+  --surface: #fafafa; /* SCAFFOLD — brand surface */
+  --text: #18181b; /* SCAFFOLD — brand text */
+  --text-muted: #71717a; /* SCAFFOLD — brand muted text */
+  --border: #e4e4e7; /* SCAFFOLD — brand border */
+  --primary: #18181b; /* SCAFFOLD — brand primary (no arbitrary green) */
+  --primary-contrast: #ffffff; /* SCAFFOLD — brand primary contrast */
+  --accent: #18181b; /* SCAFFOLD — brand accent */
+  --success: #15803d; /* semantic status — not brand */
+  --warning: #b45309; /* semantic status — not brand */
+  --error: #b91c1c; /* semantic status — not brand */
+  --info: #1d4ed8; /* semantic status — not brand */
+  --radius: 12px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
