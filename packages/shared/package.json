@@ -2,13 +2,14 @@
   "name": "@togi/shared",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "tsc --noEmit"
+    "prepare": "tsc -p tsconfig.build.json"
   },
   "devDependencies": {
     "typescript": "5.9.3",
