@@ -68,6 +68,7 @@ CREATE TABLE "CustomerProfile" (
 CREATE TABLE "StaffProfile" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "fullName" TEXT NOT NULL,
     "employeeRef" TEXT,
     "department" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
