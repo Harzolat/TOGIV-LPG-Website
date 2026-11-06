@@ -455,6 +455,7 @@ CREATE TABLE "OtpCode" (
     "phone" TEXT NOT NULL,
     "purpose" TEXT NOT NULL,
     "codeHash" TEXT NOT NULL,
+    "ip" TEXT,
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "consumedAt" TIMESTAMP(3),
     "expiresAt" TIMESTAMP(3) NOT NULL,
@@ -658,6 +659,9 @@ CREATE INDEX "Session_expiresAt_idx" ON "Session"("expiresAt");
 
 -- CreateIndex
 CREATE INDEX "OtpCode_phone_purpose_createdAt_idx" ON "OtpCode"("phone", "purpose", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "OtpCode_ip_createdAt_idx" ON "OtpCode"("ip", "createdAt");
 
 -- CreateIndex
 CREATE INDEX "OtpCode_expiresAt_idx" ON "OtpCode"("expiresAt");
