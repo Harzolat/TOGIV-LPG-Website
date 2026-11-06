@@ -1,0 +1,700 @@
+// Throne of Grace Integrated Ventures — LPG Platform
+// Data core per approved planning document v1.2.4 (Phase 1A).
+//
+// Conventions:
+// - UUID PKs (time-sortable v7 generated app-side where ordering matters)
+// - Money stored in kobo (integer)
+// - Phones stored E.164 (e.g. +2348012345678), normalised via libphonenumber-js
+// - Business tables soft-delete (deleted_at); history/audit tables append-only
+// - branch_id reserved for future multi-branch (nullable, default branch)
+//
+// Note: the partial unique index on users.phone (WHERE deleted_at IS NULL)
+// is not expressible in Prisma schema and is created via custom SQL migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: connection URL lives in prisma.config.ts (see apps/api/prisma.config.ts)
+}
+
+// ───────────────────────────── Identity ─────────────────────────────
+
+enum UserKind {
+  customer
+  staff
+}
+
+enum UserStatus {
+  active
+  suspended
+  deleted
+}
+
+model User {
+  id           String     @id @default(uuid())
+  phone        String     @unique // see partial-index migration note above
+  email        String?    @unique
+  passwordHash String?
+  kind         UserKind   @default(customer)
+  status       UserStatus @default(active)
+  lastLoginAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  customerProfile CustomerProfile?
+  staffProfile    StaffProfile?
+  roles           UserRole[]
+  sessions        Session[]
+  notifications   Notification[]
+  requestedReqs   ServiceRequest[] @relation("RequestRequestedBy")
+  auditLogs       AuditLog[]       @relation("AuditActor")
+
+  @@index([kind, status])
+}
+
+model CustomerProfile {
+  id                String    @id @default(uuid())
+  userId            String    @unique
+  fullName          String
+  preferredContact  String    @default("sms") // sms | whatsapp | email
+  state             String?
+  lga               String?
+  marketingConsent  Boolean   @default(false)
+  consentAt         DateTime?
+  suspendedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user       User               @relation(fields: [userId], references: [id])
+  addresses  CustomerAddress[]
+  cylinders  Cylinder[]
+  requests   ServiceRequest[]
+  claims     CylinderClaim[]
+  ownedHistory CylinderOwnershipHistory[]
+  reviews    Review[]
+
+  @@index([state, lga])
+}
+
+model StaffProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  employeeRef String?  @unique
+  department  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user           User               @relation(fields: [userId], references: [id])
+  assignedReq    ServiceRequest[]   @relation("RequestAssignedStaff")
+  deliveries     Delivery[]
+  claimDecisions CylinderClaimState[] @relation("ClaimReviewer")
+}
+
+// ───────────────────────────── RBAC ─────────────────────────────
+
+model Role {
+  id          String @id @default(uuid())
+  key         String @unique // super_admin | admin | agent | delivery | customer
+  label       String
+  description String?
+
+  permissions RolePermission[]
+  users       UserRole[]
+}
+
+model Permission {
+  id   String @id @default(uuid())
+  key  String @unique // e.g. "request:update", "qr:manage"
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+}
+
+// ───────────────────────────── Addresses & zones ─────────────────────────────
+
+model CustomerAddress {
+  id           String   @id @default(uuid())
+  customerId   String
+  label        String   @default("Home")
+  line1        String
+  line2        String?
+  city         String
+  state        String
+  lga          String
+  zoneId       String?
+  geoLat       Float?
+  geoLng       Float?
+  isDefault    Boolean  @default(false)
+  deliveryNote String?
+  deletedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer  CustomerProfile @relation(fields: [customerId], references: [id])
+  zone     DeliveryZone?    @relation(fields: [zoneId], references: [id])
+  requests ServiceRequest[]
+
+  @@index([customerId, isDefault])
+}
+
+model DeliveryZone {
+  id        String @id @default(uuid())
+  name      String @unique
+  lgaList   String[]
+  active    Boolean @default(true)
+  createdAt DateTime @default(now())
+
+  addresses CustomerAddress[]
+  prices    PriceRule[]
+  requests  ServiceRequest[]
+
+  @@index([active])
+}
+
+// ───────────────────────────── Cylinders ─────────────────────────────
+
+model CylinderType {
+  id         String  @id @default(uuid())
+  capacityKg Float   @unique // 3, 6, 12.5, 25, 50
+  label      String
+  active     Boolean @default(true)
+
+  cylinders Cylinder[]
+  prices    PriceRule[]
+}
+
+model Cylinder {
+  id               String   @id @default(uuid())
+  ownerCustomerId  String?  // null = company stock
+  cylinderTypeId   String
+  serial           String?  @unique
+  label            String?  // customer-facing nickname
+  brand            String?
+  condition        String   @default("serviceable") // serviceable | needs_inspection | out_of_service
+  registeredAt     DateTime @default(now())
+  deletedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  owner           CustomerProfile?         @relation(fields: [ownerCustomerId], references: [id])
+  cylinderType    CylinderType             @relation(fields: [cylinderTypeId], references: [id])
+  qrStates        QrCodeState[] // 0..N over lifetime; at most one 'active' (partial unique index)
+  qrEvents        QrCodeEvent[]
+  qrClaims        CylinderClaim[]
+  ownershipHistory CylinderOwnershipHistory[]
+  requests        ServiceRequest[]
+
+  @@index([ownerCustomerId])
+}
+
+// Append-only: ownership changes are staff-mediated and never silent.
+model CylinderOwnershipHistory {
+  id             String   @id @default(uuid())
+  cylinderId     String
+  fromCustomerId String?
+  toCustomerId   String
+  reason         String
+  actorUserId    String
+  createdAt      DateTime @default(now())
+
+  cylinder Cylinder         @relation(fields: [cylinderId], references: [id])
+  toOwner  CustomerProfile  @relation(fields: [toCustomerId], references: [id])
+
+  @@index([cylinderId, createdAt])
+}
+
+// ───────────────────────────── QR (immutable identity + events + projection) ─────────────────────────────
+
+enum QrLifecycleEvent {
+  generated
+  printed
+  assigned
+  activated
+  deactivated
+  reactivated
+  replaced
+  revoked
+}
+
+enum QrCurrentState {
+  unassigned
+  active
+  deactivated
+  replaced
+  revoked
+}
+
+// Immutable identity row: written once, never updated.
+model QrCode {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique // SHA-256 of the opaque 128-bit token; raw token never stored
+  serial    String   @unique // printable sticker serial
+  batchId   String?
+  createdAt DateTime @default(now())
+
+  events QrCodeEvent[]
+  state  QrCodeState?
+  claims CylinderClaim[]
+
+  @@index([batchId])
+}
+
+// Append-only lifecycle ledger (INSERT-only).
+model QrCodeEvent {
+  id         String           @id @default(uuid())
+  qrCodeId   String
+  eventType  QrLifecycleEvent
+  cylinderId String?
+  actorId    String? // null = system
+  reason     String?
+  metadata   Json?
+  createdAt  DateTime         @default(now())
+
+  qrCode   QrCode    @relation(fields: [qrCodeId], references: [id])
+  cylinder Cylinder? @relation(fields: [cylinderId], references: [id])
+
+  @@index([qrCodeId, createdAt])
+  @@index([cylinderId, createdAt])
+}
+
+// Derived projection: written only inside the transaction that appends the event.
+// Rebuildable from QrCodeEvent. One ACTIVE QR per cylinder enforced by partial
+// unique index in migration 0002 (not @unique — replacements re-attach cylinders).
+model QrCodeState {
+  qrCodeId     String         @id
+  currentState QrCurrentState @default(unassigned)
+  cylinderId   String?
+  updatedAt    DateTime       @updatedAt
+
+  qrCode   QrCode    @relation(fields: [qrCodeId], references: [id])
+  cylinder Cylinder? @relation(fields: [cylinderId], references: [id])
+
+  @@index([cylinderId, currentState])
+}
+
+// Aggregated analytics only — no PII, no raw tokens, invalid scans keep qrCodeId null.
+model QrScanEvent {
+  id         String   @id @default(uuid())
+  qrCodeId   String?
+  scannedAt  DateTime @default(now())
+  outcome    String // valid | invalid | deactivated | revoked | replaced
+  uaFamily   String?
+  referrer   String?
+  ipRegion   String?
+
+  @@index([qrCodeId, scannedAt])
+  @@index([scannedAt])
+}
+
+// ───────────────────────────── Cylinder claims ─────────────────────────────
+
+enum ClaimType {
+  register_new
+  dispute_existing
+}
+
+enum ClaimState {
+  pending
+  approved
+  rejected
+  withdrawn
+}
+
+// Immutable submission record: written once, never updated.
+model CylinderClaim {
+  id                   String    @id @default(uuid())
+  claimType            ClaimType
+  qrCodeId             String?
+  cylinderId           String?
+  claimedByCustomerId  String
+  evidenceNote         String
+  evidenceAttachmentIds String[] @default([])
+  linkReviewRequired   Boolean   @default(false) // staff-flagged uncertainty routes to review
+  createdAt            DateTime  @default(now())
+
+  qrCode    QrCode?           @relation(fields: [qrCodeId], references: [id])
+  cylinder  Cylinder?         @relation(fields: [cylinderId], references: [id])
+  claimant  CustomerProfile   @relation(fields: [claimedByCustomerId], references: [id])
+  events    CylinderClaimEvent[]
+  state     CylinderClaimState?
+
+  @@index([claimedByCustomerId, createdAt])
+  @@index([cylinderId])
+}
+
+// Append-only event ledger (INSERT-only): reviewers, decisions, withdrawals, reopenings.
+model CylinderClaimEvent {
+  id           String         @id @default(uuid())
+  claimId      String
+  eventType    String // submitted | acknowledged | approved | rejected | withdrawn | reopened
+  actorId      String? // null = system
+  decisionNote String?
+  metadata     Json?
+  createdAt    DateTime       @default(now())
+
+  claim CylinderClaim @relation(fields: [claimId], references: [id])
+
+  @@index([claimId, createdAt])
+}
+
+// Controlled projection: same transaction as event append; rebuildable.
+model CylinderClaimState {
+  claimId      String     @id
+  currentState ClaimState @default(pending)
+  reviewedBy   String?
+  reviewedAt   DateTime?
+  decisionNote String?
+  updatedAt    DateTime   @updatedAt
+
+  claim    CylinderClaim  @relation(fields: [claimId], references: [id])
+  reviewer StaffProfile?  @relation("ClaimReviewer", fields: [reviewedBy], references: [id])
+}
+
+// ───────────────────────────── Service requests ─────────────────────────────
+
+enum RequestType {
+  refill
+  complaint
+  enquiry
+}
+
+enum RequestStatus {
+  Submitted
+  Received
+  UnderReview
+  Accepted
+  Processing
+  Dispatched
+  Completed
+  Resolved
+  Rejected
+  Cancelled
+  Escalated
+}
+
+enum DeliveryMethod {
+  home
+  station
+}
+
+model ServiceRequest {
+  id             String        @id @default(uuid())
+  reference      String        @unique // human-readable, e.g. RFL-2026-000481
+  type           RequestType
+  status         RequestStatus @default(Submitted)
+  customerId     String? // nullable: guest submissions have no account yet
+  contactPhone   String // E.164 — always present (guest identity + notification fallback)
+  submittedVia   String        @default("web") // qr | web | guest
+  requestedById  String?
+  assignedStaffId String?
+  cylinderId     String?
+  addressId      String?
+  deliveryMethod DeliveryMethod?
+  payload        Json // type-specific fields (zod-validated per type)
+  priceEstimateKobo Int?
+  zoneId         String?
+  branchId       String?
+  guestLinkedAt  DateTime?
+  linkedByUserId String? // who confirmed the link (customer or staff)
+  retryCount     Int           @default(0) // single source of truth for delivery retries (v1.2.4)
+  slaDueAt       DateTime?
+  completedAt    DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  customer      CustomerProfile?  @relation(fields: [customerId], references: [id])
+  requestedBy   User?             @relation("RequestRequestedBy", fields: [requestedById], references: [id])
+  assignedStaff StaffProfile?     @relation("RequestAssignedStaff", fields: [assignedStaffId], references: [id])
+  cylinder      Cylinder?         @relation(fields: [cylinderId], references: [id])
+  address       CustomerAddress?  @relation(fields: [addressId], references: [id])
+  zone          DeliveryZone?     @relation(fields: [zoneId], references: [id])
+
+  statusHistory RequestStatusHistory[]
+  messages      RequestMessage[]
+  attachments   RequestAttachment[]
+  statusLinks   RequestStatusLink[]
+  deliveries    Delivery[] // one row per attempt; exactly one active (partial unique index)
+  review        Review?
+
+  @@index([status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([contactPhone]) // guest-link candidate lookup
+  @@index([assignedStaffId, status])
+  @@index([type, status])
+}
+
+// Append-only (INSERT-only): status transitions never rewrite history.
+model RequestStatusHistory {
+  id              String        @id @default(uuid())
+  requestId       String
+  fromStatus      RequestStatus?
+  toStatus        RequestStatus
+  actorId         String? // null = system
+  actorKind       String        @default("system") // system | customer | staff
+  note            String?
+  visibleToCustomer Boolean     @default(false)
+  createdAt       DateTime      @default(now())
+
+  request ServiceRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, createdAt])
+}
+
+model RequestMessage {
+  id         String   @id @default(uuid())
+  requestId  String
+  senderId   String? // null = system
+  body       String
+  internal   Boolean  @default(false) // internal notes never reach customers
+  createdAt  DateTime @default(now())
+
+  request ServiceRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, createdAt])
+}
+
+model RequestAttachment {
+  id         String   @id @default(uuid())
+  requestId  String
+  storageKey String // random server-generated key; original filename never used
+  mime       String
+  sizeBytes  Int
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+
+  request ServiceRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId])
+}
+
+// Many rows per request; at most ONE active (partial unique via migration SQL).
+// Revoked/regenerated links preserved as historical records.
+model RequestStatusLink {
+  id        String    @id @default(uuid())
+  requestId String
+  tokenHash String    @unique // SHA-256 of >=128-bit opaque token
+  status    String    @default("active") // active | revoked | superseded
+  expiresAt DateTime?
+  revokedAt DateTime?
+  createdBy String?
+  lastUsedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  request ServiceRequest @relation(fields: [requestId], references: [id])
+
+  @@index([requestId, status])
+}
+
+// ───────────────────────────── Deliveries ─────────────────────────────
+
+enum DeliveryStatus {
+  AwaitingAssignment
+  Assigned
+  Preparing
+  Dispatched
+  Arrived
+  Delivered
+  Failed
+}
+
+model Delivery {
+  id               String         @id @default(uuid())
+  requestId        String // retries insert new rows for the same refill; ONE ACTIVE attempt per refill enforced via partial unique index (migration SQL)
+  attemptNumber    Int            @default(1) // 1 = original; retries n+1
+  parentDeliveryId String? // retry references immediately preceding failed attempt
+  deliveryPersonId String? // current assignment
+  status           DeliveryStatus @default(AwaitingAssignment)
+  version          Int            @default(0) // optimistic concurrency (expected_status)
+  scheduledDate    DateTime?
+  windowLabel      String?
+  addressSnapshot  Json // immutable copy — later address edits don't rewrite history
+  failureReason    String? // no_answer | address_not_found | unsafe_location | customer_postponed | vehicle_issue | other
+  dispatchedAt     DateTime?
+  deliveredAt      DateTime?
+  confirmedBy      String? // driver confirm (+ optional customer OTP per config)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  request        ServiceRequest        @relation(fields: [requestId], references: [id])
+  deliveryPerson StaffProfile?         @relation(fields: [deliveryPersonId], references: [id])
+  parentAttempt  Delivery?             @relation("DeliveryRetry", fields: [parentDeliveryId], references: [id])
+  childAttempts  Delivery[]            @relation("DeliveryRetry")
+  assignments    DeliveryAssignment[]
+
+  @@index([status])
+  @@index([deliveryPersonId, status])
+  @@index([requestId, attemptNumber])
+}
+
+// Append-only assignment history (reassignment never overwrites).
+model DeliveryAssignment {
+  id          String    @id @default(uuid())
+  deliveryId  String
+  staffId     String
+  assignedBy  String
+  assignedAt  DateTime  @default(now())
+  unassignedAt DateTime?
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id])
+
+  @@index([deliveryId, assignedAt])
+}
+
+// ───────────────────────────── Notifications ─────────────────────────────
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt, createdAt])
+}
+
+// Transactional outbox: written in the same transaction as the business event.
+model NotificationOutbox {
+  id           String    @id @default(uuid())
+  eventType    String
+  payload      Json
+  channel      String // in_app | email | sms | whatsapp
+  status       String    @default("pending") // pending | sent | failed | dead
+  attempts     Int       @default(0)
+  nextAttemptAt DateTime @default(now())
+  providerRef  String?
+  dedupeKey    String    @unique // (entity, to_status, attempt) — duplicate protection
+  createdAt    DateTime  @default(now())
+  sentAt       DateTime?
+
+  @@index([status, nextAttemptAt])
+}
+
+// ───────────────────────────── Reviews (schema now, UI Phase 3) ─────────────────────────────
+
+model Review {
+  id         String   @id @default(uuid())
+  requestId  String   @unique // one review per completed request
+  customerId String
+  rating     Int // 1..5
+  comment    String?
+  status     String   @default("pending") // pending | approved | rejected
+  createdAt  DateTime @default(now())
+
+  request  ServiceRequest   @relation(fields: [requestId], references: [id])
+  customer CustomerProfile  @relation(fields: [customerId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+// ───────────────────────────── Auth ─────────────────────────────
+
+model Session {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique // SHA-256 of opaque 256-bit token; raw token never stored
+  userId     String
+  audience   String // customer | admin — cross-audience use rejected server-side
+  ip         String?
+  userAgent  String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+}
+
+model OtpCode {
+  id        String    @id @default(uuid())
+  phone     String // E.164
+  purpose   String // login | register | recovery
+  codeHash  String // HMAC with server pepper
+  attempts  Int       @default(0)
+  consumedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([phone, purpose, createdAt])
+  @@index([expiresAt])
+}
+
+// ───────────────────────────── Business configuration ─────────────────────────────
+
+model BusinessSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g. "company.name", "pricing.updated", "safety.emergency_numbers"
+  value     Json
+  scope     String   @default("global")
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Time-bounded price rows: price history auditable; requests snapshot estimates.
+model PriceRule {
+  id              String    @id @default(uuid())
+  zoneId          String?
+  cylinderTypeId  String
+  basePriceKobo   Int
+  deliveryFeeKobo Int       @default(0)
+  validFrom       DateTime
+  validTo         DateTime?
+  updatedBy       String?
+  createdAt       DateTime  @default(now())
+
+  zone         DeliveryZone? @relation(fields: [zoneId], references: [id])
+  cylinderType CylinderType  @relation(fields: [cylinderTypeId], references: [id])
+
+  @@index([cylinderTypeId, zoneId, validFrom])
+}
+
+// ───────────────────────────── Audit ─────────────────────────────
+
+// Append-only (INSERT-only): who did what, before/after, retained per schedule.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String? // null = system
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
