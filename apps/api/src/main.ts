@@ -1,11 +1,19 @@
 import { NestFactory } from "@nestjs/core";
 import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
 import { AppModule } from "./app.module";
+import { browserSecurityMiddleware } from "./common/http";
+
+dotenv.config(); // local dev: apps/api/.env (production injects env directly)
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api/v1");
+
+  // Order matters: cookies first (middleware + guards read them), then
+  // Origin/CSRF checks, before any route handler (v1.2 §12.4).
   app.use(cookieParser());
+  app.use(browserSecurityMiddleware);
 
   // Two-origin CORS with credentials (v1.2 §12.4): explicit allowlist,
   // never '*', never Origin reflection.

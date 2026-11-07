@@ -29,6 +29,7 @@ const verifySchema = phoneSchema.extend({
   code: z.string().regex(/^\d{6}$/, "6-digit code required"),
   purpose: z.enum(["login", "register", "recovery"]),
   csrfToken: z.string().min(16),
+  fullName: z.string().trim().min(2).max(120).optional(), // required for register (checked below)
 });
 
 interface CsrfRequest extends Request {
@@ -96,6 +97,10 @@ export class AuthController {
     const audience = this.audienceFrom(req);
     this.assertCsrf(req, audience, parsed.data.csrfToken);
 
+    if (parsed.data.purpose === "register" && !parsed.data.fullName) {
+      throw new ForbiddenException("Your name is required to register.");
+    }
+
     let phone: string;
     try {
       phone = normalizeNgPhone(parsed.data.phone);
@@ -122,6 +127,21 @@ export class AuthController {
     const user =
       existing ??
       (await this.prisma.user.create({ data: { phone, kind: "customer", status: "active" } }));
+
+    // Every customer needs exactly one profile (customerId invariant)
+    if (user.kind === "customer") {
+      const profile = await this.prisma.customerProfile.findUnique({
+        where: { userId: user.id },
+      });
+      if (!profile) {
+        await this.prisma.customerProfile.create({
+          data: {
+            userId: user.id,
+            fullName: parsed.data.fullName ?? "Valued customer",
+          },
+        });
+      }
+    }
 
     if (user.status !== "active" || user.deletedAt) {
       // Suspended accounts: throttle response, no session issued

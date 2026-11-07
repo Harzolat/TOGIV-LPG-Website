@@ -81,11 +81,18 @@ export class OutboxWorker {
 
   /** Process one batch of due pending rows. Safe to call directly in tests. */
   async drain(limit = 50): Promise<number> {
-    const due = await this.prisma.notificationOutbox.findMany({
-      where: { status: "pending", nextAttemptAt: { lte: new Date() } },
-      orderBy: { createdAt: "asc" },
-      take: limit,
-    });
+    let due;
+    try {
+      due = await this.prisma.notificationOutbox.findMany({
+        where: { status: "pending", nextAttemptAt: { lte: new Date() } },
+        orderBy: { createdAt: "asc" },
+        take: limit,
+      });
+    } catch (err) {
+      // DB unavailable — retry next tick instead of killing the process
+      this.logger.warn(`Outbox drain skipped: ${err instanceof Error ? err.message : err}`);
+      return 0;
+    }
 
     let processed = 0;
     for (const row of due) {

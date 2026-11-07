@@ -6,9 +6,8 @@ import {
   SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, User } from "@prisma/client";
 import { SessionService, SessionAudience } from "./session.service";
-import { User } from "@prisma/client";
 
 /**
  * RBAC + resource-scoped authorization — v1.2 §1.3 (approved matrix).
@@ -16,8 +15,9 @@ import { User } from "@prisma/client";
  * - Every protected route declares @RequirePermission('resource:action')
  * - Server-side enforcement: UI hiding is never the control
  * - Audience guard: admin routes reject customer sessions and vice versa
- * - Session resolved from __Host- cookie value passed by the HTTP layer
- * - Resource-level scoping (ownership) is enforced in services, not here
+ * - One query resolves roles AND permissions; role keys are attached to the
+ *   request so controllers can branch (e.g. claim decision auditing)
+ * - Resource-level scoping (ownership) is enforced in services/controllers
  */
 
 export const PERMISSION_KEY = "required_permission";
@@ -35,9 +35,9 @@ export const SESSION_COOKIES: Record<SessionAudience, string> = {
   admin: "__Host-admin_sid",
 };
 
-interface AuthenticatedRequest extends Request {
-  cookies?: Record<string, string>;
+export interface AuthedRequest extends Request {
   user?: User;
+  userRoles?: string[];
   sessionToken?: string;
 }
 
@@ -59,39 +59,44 @@ export class AuthGuard implements CanActivate {
       [ctx.getHandler(), ctx.getClass()],
     );
 
-    // Public routes: no metadata → open (still validated at service layer)
-    if (!permission && !audience) return true;
+    const request = ctx.switchToHttp().getRequest<
+      AuthedRequest & { cookies?: Record<string, string> }
+    >();
 
-    const request = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
-    const cookieName = audience ? SESSION_COOKIES[audience] : null;
-    const token = cookieName
-      ? request.cookies?.[cookieName]
-      : (request.cookies?.[SESSION_COOKIES.customer] ??
-        request.cookies?.[SESSION_COOKIES.admin]);
+    // Cookie selection: metadata pins the audience; otherwise prefer the
+    // customer cookie, falling back to admin (dual-audience detail routes).
+    const cookieName = audience
+      ? SESSION_COOKIES[audience]
+      : request.cookies?.[SESSION_COOKIES.customer]
+        ? SESSION_COOKIES.customer
+        : SESSION_COOKIES.admin;
+    const token = request.cookies?.[cookieName];
 
-    if (!token) throw new ForbiddenException("Authentication required.");
+    if (!token) {
+      if (permission || audience) {
+        throw new ForbiddenException("Authentication required.");
+      }
+      return true; // public route with no session
+    }
 
-    // Audience-bound resolution: mismatched-origin sessions rejected (§12.4)
     const effectiveAudience: SessionAudience =
-      audience ?? (token === request.cookies?.[SESSION_COOKIES.admin] ? "admin" : "customer");
-    const user = await this.sessions.resolve(token, effectiveAudience);
+      cookieName === SESSION_COOKIES.admin ? "admin" : "customer";
+
+    // Metadata routes: invalid/expired session is a hard 401.
+    // Optional routes (no metadata): stale cookie degrades to anonymous.
+    let user: User;
+    try {
+      user = await this.sessions.resolve(token, effectiveAudience);
+    } catch (e) {
+      if (permission || audience) throw e;
+      return true;
+    }
     request.user = user;
     request.sessionToken = token;
 
-    if (permission) {
-      const allowed = await this.hasPermission(user.id, permission);
-      if (!allowed) {
-        throw new ForbiddenException(`Missing permission: ${permission}`);
-      }
-    }
-
-    return true;
-  }
-
-  /** Role → permission lookup (roles M:N, seeded). Cached in-process later. */
-  async hasPermission(userId: string, permission: string): Promise<boolean> {
-    const roles = await this.prisma.user.findUnique({
-      where: { id: userId },
+    // One query: roles + permissions (permission check needs the expansion)
+    const withRoles = await this.prisma.user.findUnique({
+      where: { id: user.id },
       include: {
         roles: {
           include: {
@@ -104,9 +109,17 @@ export class AuthGuard implements CanActivate {
         },
       },
     });
-    if (!roles) return false;
-    return roles.roles.some((ur) =>
-      ur.role.permissions.some((rp) => rp.permission.key === permission),
-    );
+    request.userRoles = withRoles?.roles.map((ur) => ur.role.key) ?? [];
+
+    if (permission) {
+      const allowed = withRoles?.roles.some((ur) =>
+        ur.role.permissions.some((rp) => rp.permission.key === permission),
+      );
+      if (!allowed) {
+        throw new ForbiddenException(`Missing permission: ${permission}`);
+      }
+    }
+
+    return true;
   }
 }
