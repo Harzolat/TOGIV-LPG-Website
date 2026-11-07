@@ -129,15 +129,28 @@ export async function ensureSuperAdmin(
   prisma: PrismaClient,
   phone: string,
   fullName: string,
+  password?: string,
+  email?: string,
 ): Promise<void> {
   const role = await prisma.role.findUnique({ where: { key: "super_admin" } });
   if (!role) throw new Error("Run seedRbac first.");
 
   const user = await prisma.user.upsert({
     where: { phone },
-    update: { kind: "staff", status: "active" },
-    create: { phone, kind: "staff", status: "active" },
+    update: { kind: "staff", status: "active", ...(email ? { email } : {}) },
+    create: { phone, kind: "staff", status: "active", ...(email ? { email } : {}) },
   });
+
+  // Initial password (staff auth = password + TOTP per §12). Only set when
+  // provided — re-runs never overwrite an existing password.
+  if (password) {
+    const bcrypt = await import("bcryptjs");
+    const hash = await bcrypt.hash(password, 10);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash: hash },
+    });
+  }
 
   await prisma.staffProfile.upsert({
     where: { userId: user.id },

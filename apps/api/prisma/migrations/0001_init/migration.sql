@@ -71,6 +71,8 @@ CREATE TABLE "StaffProfile" (
     "fullName" TEXT NOT NULL,
     "employeeRef" TEXT,
     "department" TEXT,
+    "totpSecret" TEXT,
+    "totpEnrolledAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

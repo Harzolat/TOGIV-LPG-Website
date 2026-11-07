@@ -5,7 +5,9 @@ import { PrismaClient } from "@prisma/client";
 import { AuthController } from "./auth/auth.controller";
 import { AuthGuard } from "./auth/auth.guard";
 import { DevSmsAdapter, OtpService, SmsProvider } from "./auth/otp.service";
+import { LoginThrottle } from "./auth/login-throttle";
 import { SessionService } from "./auth/session.service";
+import { StaffAuthController } from "./auth/staff.controller";
 import { ClaimService } from "./claims/claim.service";
 import { ClaimsController } from "./claims/claim.controller";
 import { DeliveryService } from "./deliveries/delivery.service";
@@ -37,13 +39,14 @@ const smsProvider: SmsProvider = new DevSmsAdapter(); // launch: swap via env
 
 @Module({
   imports: [],
-  controllers: [AuthController, QrController, RequestsController, ClaimsController],
+  controllers: [AuthController, StaffAuthController, QrController, RequestsController, ClaimsController],
   providers: [
     prismaProvider,
     { provide: SmsProvider, useValue: smsProvider },
     { provide: APP_GUARD, useClass: AuthGuard },
     OtpService,
     SessionService,
+    LoginThrottle,
     AuthGuard,
     QrService,
     RequestService,

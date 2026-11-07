@@ -46,3 +46,44 @@ export function verifyOtp(code: string, codeHash: string): boolean {
 export function sha256Hex(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
+
+// ── Short-lived signed state (staff TOTP enrollment challenge) ──────────────
+//
+// A single opaque HMAC-signed blob carries { uid, purpose, exp } between the
+// login step and the enroll/verify step — no server-side pending rows to
+// expire or clean up. Tamper-proof (HMAC) + self-expiring; possession proves
+// the password step already succeeded. NOT a session: it grants nothing
+// except the right to finish enrollment for that user.
+
+export class StateTokenError extends Error {}
+
+export function signState(payload: Record<string, unknown>, ttlMs: number): string {
+  const body = Buffer.from(
+    JSON.stringify({ ...payload, exp: Date.now() + ttlMs }),
+  ).toString("base64url");
+  const mac = createHmac("sha256", PEPPER).update(body).digest("base64url");
+  return `${body}.${mac}`;
+}
+
+export function verifyState<T extends Record<string, unknown>>(token: string): T {
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) throw new StateTokenError("Malformed state token.");
+  const body = token.slice(0, dot);
+  const mac = token.slice(dot + 1);
+  const expected = createHmac("sha256", PEPPER).update(body).digest("base64url");
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
+    throw new StateTokenError("Invalid state token.");
+  }
+  let parsed: T & { exp: number };
+  try {
+    parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+  } catch {
+    throw new StateTokenError("Invalid state token.");
+  }
+  if (typeof parsed.exp !== "number" || parsed.exp < Date.now()) {
+    throw new StateTokenError("State token expired.");
+  }
+  return parsed;
+}

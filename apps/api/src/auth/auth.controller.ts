@@ -14,6 +14,12 @@ import { z } from "zod";
 import { normalizeNgPhone, PhoneNormalizationError } from "../common/phone";
 import { OtpService, OtpInvalidError, OtpThrottledError } from "./otp.service";
 import { SESSION_COOKIES } from "./auth.guard";
+import {
+  audienceFrom,
+  assertOrigin,
+  issueCsrf,
+  setSessionCookie,
+} from "./cookies";
 import { SessionAudience, SessionService } from "./session.service";
 
 /**
@@ -55,9 +61,9 @@ export class AuthController {
     const parsed = phoneSchema.safeParse(body);
     if (!parsed.success) throw new ForbiddenException("Invalid payload.");
 
-    this.assertOrigin(req);
-    const audience = this.audienceFrom(req);
-    const csrfToken = this.issueCsrf(res, audience);
+    assertOrigin(req);
+    const audience = audienceFrom(req);
+    const csrfToken = issueCsrf(res, audience);
 
     let phone: string;
     try {
@@ -93,8 +99,8 @@ export class AuthController {
     const parsed = verifySchema.safeParse(body);
     if (!parsed.success) throw new ForbiddenException("Invalid payload.");
 
-    this.assertOrigin(req);
-    const audience = this.audienceFrom(req);
+    assertOrigin(req);
+    const audience = audienceFrom(req);
     this.assertCsrf(req, audience, parsed.data.csrfToken);
 
     if (parsed.data.purpose === "register" && !parsed.data.fullName) {
@@ -157,7 +163,7 @@ export class AuthController {
       ip: req.ip,
       userAgent: req.headers["user-agent"],
     });
-    this.setSessionCookie(res, audience, session.token, session.expiresAt);
+    setSessionCookie(res, audience, session.token, session.expiresAt);
 
     return { ok: true, userId: user.id };
   }
@@ -168,7 +174,7 @@ export class AuthController {
     @Req() req: CsrfRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const audience = this.audienceFrom(req);
+    const audience = audienceFrom(req);
     const token = req.cookies?.[SESSION_COOKIES[audience]];
     if (token) await this.sessions.revoke(token);
     res.clearCookie(SESSION_COOKIES[audience], { path: "/" });
@@ -176,50 +182,14 @@ export class AuthController {
 
   @Get("me")
   async me(@Req() req: CsrfRequest) {
-    const audience = this.audienceFrom(req);
+    const audience = audienceFrom(req);
     const token = req.cookies?.[SESSION_COOKIES[audience]];
     if (!token) throw new ForbiddenException("Not authenticated.");
     const user = await this.sessions.resolve(token, audience);
     return { id: user.id, phone: user.phone, kind: user.kind };
   }
 
-  // ── cookie / CSRF / origin helpers (v1.2 §12.4) ──────────────────
-
-  private audienceFrom(req: CsrfRequest): SessionAudience {
-    // Admin origin only ever sets/reads the admin cookie (separate builds)
-    return req.cookies && SESSION_COOKIES.admin in req.cookies
-      ? "admin"
-      : "customer";
-  }
-
-  private setSessionCookie(
-    res: Response,
-    audience: SessionAudience,
-    token: string,
-    expires: Date,
-  ): void {
-    res.cookie(SESSION_COOKIES[audience], token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      expires,
-      // __Host- prefix requires: Secure + Path=/ + NO Domain — host-only,
-      // defeating sibling-subdomain cookie tossing (v1.2 §12.4)
-    });
-  }
-
-  private issueCsrf(res: Response, audience: SessionAudience): string {
-    const token = cryptoRandom();
-    res.cookie(`__Host-${audience}_csrf`, token, {
-      httpOnly: false, // JS must read it for the double-submit header
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 1000,
-    });
-    return token;
-  }
+  // ── CSRF (body-vs-cookie double submit on OTP verify, §12.4) ─────
 
   private assertCsrf(req: CsrfRequest, audience: SessionAudience, header: string): void {
     const cookie = req.cookies?.[`__Host-${audience}_csrf`];
@@ -227,23 +197,4 @@ export class AuthController {
       throw new ForbiddenException("CSRF validation failed.");
     }
   }
-
-  private assertOrigin(req: CsrfRequest): void {
-    const origin = req.headers.origin;
-    if (!origin) return; // non-browser clients (tests) — Origin absent
-    const allowed = [
-      process.env.WEB_ORIGIN ?? "http://localhost:5173",
-      process.env.ADMIN_ORIGIN ?? "http://localhost:5174",
-    ];
-    if (!allowed.includes(origin)) {
-      throw new ForbiddenException("Origin not allowed.");
-    }
-  }
-}
-
-function cryptoRandom(): string {
-  // 32-byte base64url CSRF token
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Buffer.from(bytes).toString("base64url");
 }

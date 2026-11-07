@@ -10,6 +10,15 @@ const Track = lazy(() => import("./pages/Track"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Account = lazy(() => import("./pages/Account"));
 const AccountRequest = lazy(() => import("./pages/AccountRequest"));
+const PolicyPages = lazy(() =>
+  import("./pages/Policy").then((m) => ({ default: m.Privacy })),
+);
+const SafetyPage = lazy(() =>
+  import("./pages/Policy").then((m) => ({ default: m.Safety })),
+);
+const TermsPage = lazy(() =>
+  import("./pages/Policy").then((m) => ({ default: m.Terms })),
+);
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -98,6 +107,30 @@ export default function App() {
                       <AccountRequest />
                     </Suspense>
                   </Protected>
+                }
+              />
+              <Route
+                path="privacy"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <PolicyPages />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="safety"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <SafetyPage />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="terms"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <TermsPage />
+                  </Suspense>
                 }
               />
               <Route

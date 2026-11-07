@@ -86,6 +86,10 @@ model StaffProfile {
   fullName    String
   employeeRef String?  @unique
   department  String?
+  /// TOTP base32 secret, AES-256-GCM encrypted at rest (common/crypto.ts).
+  /// Staff-only second factor; customers authenticate via SMS OTP (§12).
+  totpSecret     String?
+  totpEnrolledAt DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

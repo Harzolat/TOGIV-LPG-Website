@@ -14,7 +14,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // 5173 is often occupied by another local dev server — 5175 keeps this
+    // app's origin deterministic for the API's CORS/Origin allowlist (.env)
+    port: 5175,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://localhost:3000",
