@@ -1,12 +1,13 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 
 /**
- * Customer app shell — premium/minimalist direction, brand-neutral until
- * real Throne of Grace assets arrive (text wordmark, scaffold tokens).
- * Header: wordmark + primary nav + session action.
- * Footer: safety notice (emergency numbers come from business settings at
- * launch — placeholders are marked, never invented) + policy links.
+ * Customer app shell — premium/minimalist direction, brand palette
+ * (blue + red) from shared tokens (v1.2 §1.1).
+ * Header: wordmark + primary nav + session action, brand rule beneath.
+ * Route changes replay a short fade-up entrance (purposeful, reduced-motion
+ * safe — the global guard in tokens.css neutralises it).
+ * Footer: safety notice + policy links.
  */
 
 function Wordmark() {
@@ -19,8 +20,8 @@ function Wordmark() {
         THRONE OF GRACE
       </span>
       <span
-        className="mt-0.5 text-[0.6875rem] tracking-[0.22em] uppercase"
-        style={{ color: "var(--text-muted)" }}
+        className="mt-0.5 text-[0.6875rem] tracking-[0.22em] uppercase transition-opacity duration-200 group-hover:opacity-80"
+        style={{ color: "var(--primary)" }}
       >
         Integrated Ventures
       </span>
@@ -30,12 +31,18 @@ function Wordmark() {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
-    "rounded-full px-3.5 py-1.5 text-sm transition-colors duration-200",
+    "rounded-full px-3.5 py-1.5 text-sm transition-all duration-200",
     isActive ? "font-medium" : "hover:opacity-70",
   ].join(" ");
 
+const navLinkStyle = ({ isActive }: { isActive: boolean }) => ({
+  color: isActive ? "var(--primary)" : "var(--text)",
+  background: isActive ? "var(--primary-surface)" : "transparent",
+});
+
 export default function Layout() {
   const { user, loading, logout } = useAuth();
+  const location = useLocation();
 
   return (
     <div className="flex min-h-screen flex-col" style={{ background: "var(--background)" }}>
@@ -54,13 +61,13 @@ export default function Layout() {
           <Wordmark />
 
           <nav aria-label="Primary" className="hidden items-center gap-1 sm:flex">
-            <NavLink to="/" end className={navLinkClass} style={{ color: "var(--text)" }}>
+            <NavLink to="/" end className={navLinkClass} style={navLinkStyle}>
               Home
             </NavLink>
-            <NavLink to="/request" className={navLinkClass} style={{ color: "var(--text)" }}>
+            <NavLink to="/request" className={navLinkClass} style={navLinkStyle}>
               Request a refill
             </NavLink>
-            <NavLink to="/track" className={navLinkClass} style={{ color: "var(--text)" }}>
+            <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
               Track
             </NavLink>
           </nav>
@@ -74,8 +81,8 @@ export default function Layout() {
               <>
                 <NavLink
                   to="/account"
-                  className="rounded-full px-3.5 py-1.5 text-sm font-medium transition-opacity hover:opacity-70"
-                  style={{ color: "var(--text)" }}
+                  className={navLinkClass}
+                  style={navLinkStyle}
                 >
                   My requests
                 </NavLink>
@@ -106,19 +113,26 @@ export default function Layout() {
           className="flex gap-1 border-t px-4 py-2 sm:hidden"
           style={{ borderColor: "var(--border)" }}
         >
-          <NavLink to="/" end className={navLinkClass} style={{ color: "var(--text)" }}>
+          <NavLink to="/" end className={navLinkClass} style={navLinkStyle}>
             Home
           </NavLink>
-          <NavLink to="/request" className={navLinkClass} style={{ color: "var(--text)" }}>
+          <NavLink to="/request" className={navLinkClass} style={navLinkStyle}>
             Request
           </NavLink>
-          <NavLink to="/track" className={navLinkClass} style={{ color: "var(--text)" }}>
+          <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
             Track
           </NavLink>
         </nav>
+
+        {/* Brand rule: blue → red */}
+        <div className="t-rule" aria-hidden="true" style={{ height: 2 }} />
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
+      <main
+        id="main"
+        key={location.pathname}
+        className="t-page-in mx-auto w-full max-w-5xl flex-1 px-5 py-10"
+      >
         <Outlet />
       </main>
 
@@ -135,7 +149,7 @@ export default function Layout() {
           </div>
 
           <div>
-            <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+            <p className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
               In an emergency
             </p>
             <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>

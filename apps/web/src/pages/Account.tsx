@@ -169,7 +169,7 @@ export default function Account() {
               <li key={r.id}>
                 <Link
                   to={`/account/requests/${r.id}`}
-                  className="t-card flex items-center justify-between gap-4 p-4 transition-shadow hover:shadow"
+                  className="t-card t-lift flex items-center justify-between gap-4 p-4"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-mono text-sm font-semibold">{r.reference}</span>

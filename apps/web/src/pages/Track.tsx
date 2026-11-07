@@ -50,7 +50,7 @@ function Timeline({ type, status }: { type: RequestType; status: RequestStatus }
           <li key={step} className="flex gap-3">
             <div className="flex flex-col items-center" aria-hidden="true">
               <span
-                className="grid h-6 w-6 place-items-center rounded-full border text-[10px] font-bold"
+                className={`grid h-6 w-6 place-items-center rounded-full border text-[10px] font-bold${state === "current" ? " t-pulse" : ""}`}
                 style={{
                   borderColor: state === "todo" ? "var(--border-strong)" : "var(--primary)",
                   background: state === "done" ? "var(--primary)" : "var(--surface-raised)",

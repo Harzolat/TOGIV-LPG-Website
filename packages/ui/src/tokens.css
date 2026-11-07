@@ -1,31 +1,34 @@
 /*
  * THRONE OF GRACE INTEGRATED VENTURES — design tokens
  * ---------------------------------------------------
- * SCAFFOLD TOKENS — replace with actual Throne of Grace brand assets
- * (logo, colours, typography) when supplied. No permanent palette is
- * chosen here; every brand-dependent value is marked /* SCAFFOLD — brand *\/
- * so a single file swap rebrands both apps. Planning document v1.2 §1.1.
- *
- * Semantic status colours (success/warning/error/info) are NOT brand and
- * only need review for contrast, not replacement.
+ * BRAND PALETTE (supplied): blue + red. Every brand-dependent value below is
+ * marked /* BRAND — blue/red *\/ so future brand refreshes stay surgical.
+ * Semantic status colours (success/warning/error/info) are NOT brand — they
+ * carry system meaning and stay stable across rebrands.
+ * Typography/logo assets are still pending; the typeface stack remains a
+ * neutral system fallback until supplied. Planning document v1.2 §1.1.
  *
  * Import order: host app does `@import "tailwindcss"` then
  * `@import "@togi/ui/tokens.css"` — keep this file free of Tailwind directives.
  */
 
 :root {
-  /* ── Surfaces & text (brand-swap) ─────────────────────────── */
-  --background: #ffffff; /* SCAFFOLD — brand surface */
-  --surface: #fafafa; /* SCAFFOLD — brand surface */
-  --surface-raised: #ffffff; /* SCAFFOLD — brand surface (cards) */
-  --text: #18181b; /* SCAFFOLD — brand text */
-  --text-muted: #71717a; /* SCAFFOLD — brand muted text */
-  --border: #e4e4e7; /* SCAFFOLD — brand border */
-  --border-strong: #d4d4d8; /* SCAFFOLD — brand border (emphasis) */
-  --primary: #18181b; /* SCAFFOLD — brand primary (no arbitrary green) */
-  --primary-hover: #3f3f46; /* SCAFFOLD — brand primary hover */
-  --primary-contrast: #ffffff; /* SCAFFOLD — brand primary contrast */
-  --accent: #18181b; /* SCAFFOLD — brand accent */
+  /* ── Surfaces & text (cool-neutral family, tuned to the blue brand) ── */
+  --background: #ffffff; /* surface */
+  --surface: #f6f8fb; /* surface (cool tint) */
+  --surface-raised: #ffffff; /* surface (cards) */
+  --text: #0f172a; /* text */
+  --text-muted: #64748b; /* muted text */
+  --border: #e4e8f0; /* border */
+  --border-strong: #d3dae6; /* border (emphasis) */
+
+  /* ── Brand (supplied: blue + red) ─────────────────────────── */
+  --primary: #1a56db; /* BRAND — blue */
+  --primary-hover: #1444b0; /* BRAND — blue (hover) */
+  --primary-contrast: #ffffff; /* on-brand contrast */
+  --primary-surface: #eef4ff; /* BRAND — blue tint (active nav, soft fills) */
+  --accent: #d01f37; /* BRAND — red (emphasis only, never body text) */
+  --accent-surface: #fdeef1; /* BRAND — red tint */
 
   /* ── Semantic status (not brand) ──────────────────────────── */
   --success: #15803d;
@@ -100,9 +103,16 @@
 .t-btn--primary {
   background: var(--primary);
   color: var(--primary-contrast);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 .t-btn--primary:hover:not(:disabled) {
   background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 32%, transparent);
+}
+.t-btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
 .t-btn--secondary {
@@ -489,6 +499,78 @@ select.t-input {
   border-top-color: var(--primary);
   border-radius: 50%;
   animation: t-spin 0.7s linear infinite;
+}
+
+/* Motion utilities — premium micro-interactions (v1.2 §UI) ------ */
+
+/* Route/page entrance: applied by the app shell on navigation */
+@keyframes t-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.t-page-in {
+  animation: t-fade-up 0.45s var(--ease) both;
+}
+
+/* Lift-on-hover for interactive cards/list rows */
+.t-lift {
+  transition:
+    transform var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease),
+    border-color var(--duration) var(--ease);
+}
+.t-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+}
+
+/* Brand rule: blue→red accent line (hero, section dividers) */
+.t-rule {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  transform-origin: left center;
+}
+
+/* Soft brand glow behind hero content — depth without imagery */
+.t-glow {
+  position: absolute;
+  inset: auto -10% 40% -10%;
+  height: 420px;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 55% at 22% 45%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 70%),
+    radial-gradient(34% 48% at 72% 40%, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%);
+  filter: blur(6px);
+  z-index: -1;
+}
+
+/* OTP code input — spacious monospaced entry feels deliberate, not cramped */
+.t-field--code .t-input {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  letter-spacing: 0.45em;
+  text-indent: 0.45em; /* balances trailing letter-spacing for true centering */
+}
+
+/* Live "now" indicator — gentle pulse on the current timeline step */
+@keyframes t-pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+.t-pulse {
+  animation: t-pulse-ring 2.2s var(--ease) infinite;
 }
 
 /* Table ------------------------------------------------------- */

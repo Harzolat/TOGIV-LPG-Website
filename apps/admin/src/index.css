@@ -3,7 +3,7 @@
 
 /*
  * Admin console shares the design tokens with the customer app —
- * single source in packages/ui/tokens.css (scaffold until brand assets).
+ * single source in packages/ui/tokens.css (brand: blue + red).
  */
 body {
   background: var(--background);

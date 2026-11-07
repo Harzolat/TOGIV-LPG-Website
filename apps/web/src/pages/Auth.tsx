@@ -154,6 +154,7 @@ export default function Auth({ mode }: Props) {
 
             <TextInput
               ref={codeRef}
+              className="t-field--code"
               label="Verification code"
               inputMode="numeric"
               autoComplete="one-time-code"

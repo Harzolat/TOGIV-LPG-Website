@@ -3,10 +3,10 @@
 
 /*
  * Shared design tokens live in packages/ui/tokens.css — single source for
- * both apps. SCAFFOLD values until Throne of Grace brand assets are supplied
- * (planning document v1.2 §1.1): swap that file, not this one.
+ * both apps (brand: blue + red, supplied; logo/typeface still pending per
+ * planning document v1.2 §1.1): brand changes go there, not here.
  *
- * Body defaults — premium/minimalist direction, system typeface until brand.
+ * Body defaults — premium/minimalist direction.
  */
 body {
   background: var(--background);

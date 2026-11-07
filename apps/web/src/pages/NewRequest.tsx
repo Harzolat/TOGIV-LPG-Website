@@ -232,13 +232,32 @@ export default function NewRequest() {
               role="radio"
               aria-checked={active}
               onClick={() => setType(t.id)}
-              className="t-card p-4 text-left transition-all duration-200"
+              className="t-card t-lift p-4 text-left"
               style={{
                 borderColor: active ? "var(--primary)" : "var(--border)",
-                boxShadow: active ? "0 0 0 1px var(--primary)" : "var(--shadow-sm)",
+                boxShadow: active
+                  ? "0 0 0 1px var(--primary), 0 8px 20px color-mix(in srgb, var(--primary) 16%, transparent)"
+                  : "var(--shadow-sm)",
+                background: active ? "var(--primary-surface)" : "var(--surface-raised)",
               }}
             >
-              <span className="block text-sm font-semibold">{t.title}</span>
+              <span className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold">{t.title}</span>
+                {active ? (
+                  <span
+                    className="grid h-4.5 w-4.5 place-items-center rounded-full text-[10px] font-bold"
+                    style={{
+                      background: "var(--primary)",
+                      color: "var(--primary-contrast)",
+                      width: "1.125rem",
+                      height: "1.125rem",
+                    }}
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                ) : null}
+              </span>
               <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
                 {t.blurb}
               </span>
