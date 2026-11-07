@@ -103,13 +103,13 @@ export default function Home() {
     const ctx = gsap.context(() => {
       gsap
         .timeline({ defaults: { ease: "power3.out" } })
-        .from("[data-hero-media]", { y: 44, opacity: 0, duration: 1.0 }, 0.1)
-        .from("[data-hero-img]", { scale: 1.1, duration: 1.5, ease: "power2.out" }, 0.1)
-        .from("[data-hero-badge]", { y: 14, opacity: 0, duration: 0.5 }, 0.15)
-        .from("[data-hero-line]", { y: 30, opacity: 0, duration: 0.7, stagger: 0.1 }, 0.3)
-        .from("[data-hero-rule]", { scaleX: 0, duration: 0.8, ease: "power3.inOut" }, 0.75)
-        .from("[data-hero-sub]", { y: 16, opacity: 0, duration: 0.55 }, 0.85)
-        .from("[data-hero-cta]", { y: 12, opacity: 0, duration: 0.5, stagger: 0.08 }, 1.0);
+        // Background photo settles from a slow zoom (Ken Burns), then copy cascades
+        .from("[data-hero-img]", { scale: 1.1, duration: 1.9, ease: "power2.out" }, 0)
+        .from("[data-hero-badge]", { y: 14, opacity: 0, duration: 0.5 }, 0.2)
+        .from("[data-hero-line]", { y: 30, opacity: 0, duration: 0.7, stagger: 0.1 }, 0.35)
+        .from("[data-hero-rule]", { scaleX: 0, duration: 0.8, ease: "power3.inOut" }, 0.8)
+        .from("[data-hero-sub]", { y: 16, opacity: 0, duration: 0.55 }, 0.9)
+        .from("[data-hero-cta]", { y: 12, opacity: 0, duration: 0.5, stagger: 0.08 }, 1.05);
     }, scope);
 
     return () => ctx.revert();
@@ -117,21 +117,35 @@ export default function Home() {
 
   return (
     <div ref={scope}>
-      {/* Hero — copy left, photo bleeding to the right edge on large screens */}
-      <section className="bleed-right relative overflow-hidden pb-28 pt-4 sm:pt-8 lg:pb-32">
-        {/* Soft brand tint (mockup's organic shape, recoloured to blue+red) */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(42% 58% at 76% 22%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 70%), radial-gradient(30% 42% at 60% 80%, color-mix(in srgb, var(--accent) 5%, transparent), transparent 72%)",
-          }}
-        />
+      {/* Hero — delivery photo as the full-section background; copy sits
+          left over a scrim that keeps every line fully legible. */}
+      <section className="bleed-full relative -mt-10 overflow-hidden pb-28 pt-14 sm:pt-16 lg:pb-32 lg:pt-20">
+        {/* Background photography */}
+        <div className="absolute inset-0">
+          <picture>
+            <source
+              type="image/webp"
+              srcSet="/images/lpg-hero-900.webp 900w, /images/lpg-hero-1600.webp 1600w"
+              sizes="100vw"
+            />
+            <img
+              data-hero-img
+              src="/images/lpg-hero-1600.jpg"
+              srcSet="/images/lpg-hero-900.jpg 900w, /images/lpg-hero-1600.jpg 1600w"
+              sizes="100vw"
+              width={1600}
+              height={1067}
+              alt="Delivery rider on a motorcycle loaded with LPG cylinders on a sunny road"
+              className="block h-full w-full object-cover"
+              style={{ objectPosition: "62% center" }}
+              decoding="async"
+            />
+          </picture>
+        </div>
+        <div className="hero-scrim absolute inset-0" aria-hidden="true" />
 
-        <div className="relative grid items-center gap-10 lg:grid-cols-[1.25fr_1fr] lg:gap-12">
-          {/* Copy column */}
-          <div className="min-w-0">
+        <div className="relative mx-auto w-full max-w-5xl px-5">
+          <div className="max-w-2xl">
             <p
               data-hero-badge
               className="mb-5 inline-flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-4 text-xs font-semibold"
@@ -192,33 +206,6 @@ export default function Home() {
                 <Search size={16} aria-hidden="true" />
               </Link>
             </div>
-          </div>
-
-          {/* Photo column — flush to the viewport edge at lg */}
-          <div
-            data-hero-media
-            className="min-w-0 overflow-hidden rounded-2xl lg:rounded-l-3xl lg:rounded-r-none"
-            style={{ boxShadow: "0 28px 60px -28px color-mix(in srgb, var(--text) 45%, transparent)" }}
-          >
-            <picture>
-              <source
-                type="image/webp"
-                srcSet="/images/lpg-hero-900.webp 900w, /images/lpg-hero-1600.webp 1600w"
-                sizes="(min-width: 1024px) 50vw, 92vw"
-              />
-              <img
-                data-hero-img
-                src="/images/lpg-hero-1600.jpg"
-                srcSet="/images/lpg-hero-900.jpg 900w, /images/lpg-hero-1600.jpg 1600w"
-                sizes="(min-width: 1024px) 50vw, 92vw"
-                width={1600}
-                height={1067}
-                alt="Delivery rider on a motorcycle loaded with LPG cylinders on a sunny road"
-                className="block w-full object-cover"
-                style={{ aspectRatio: "3 / 2", objectPosition: "center center" }}
-                decoding="async"
-              />
-            </picture>
           </div>
         </div>
       </section>

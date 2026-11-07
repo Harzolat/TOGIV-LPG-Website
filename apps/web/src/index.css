@@ -21,17 +21,44 @@ body {
 }
 
 /*
- * Right-edge bleed for the home hero (mockup: the hero photo runs off the
- * right side of the viewport). margin percentage resolves against main's
- * content box; for the centered max-w-5xl container the formula lands the
- * section edge exactly on the viewport edge. Large screens only — on mobile
- * the hero stays inside the page gutters.
+ * Full-bleed for the home hero (mockup: the hero photo is the section
+ * background, edge to edge). margin % resolves against main's content box;
+ * for the centered max-w-5xl container the formula spans the section
+ * exactly across the viewport on every width. overflow-x: clip on body
+ * guards the 100vw scrollbar overshoot.
  */
-.bleed-right {
-  margin-right: 0;
+.bleed-full {
+  margin-left: calc((100vw - 100%) / -2);
+  margin-right: calc((100vw - 100%) / -2);
 }
-@media (min-width: 1024px) {
-  .bleed-right {
-    margin-right: calc((100vw - 100%) / -2);
+
+/*
+ * Hero scrim — keeps the left-side copy fully legible over the photo:
+ * solid page colour under the text, fading to clear by the right third,
+ * plus a light base wash. Mobile gets a stronger top-down wash since
+ * copy spans the full width there.
+ */
+.hero-scrim {
+  background:
+    linear-gradient(
+      90deg,
+      var(--background) 0%,
+      color-mix(in srgb, var(--background) 93%, transparent) 30%,
+      color-mix(in srgb, var(--background) 48%, transparent) 55%,
+      color-mix(in srgb, var(--background) 14%, transparent) 78%,
+      transparent 100%
+    ),
+    color-mix(in srgb, var(--background) 30%, transparent);
+}
+@media (max-width: 639px) {
+  .hero-scrim {
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--background) 92%, transparent) 0%,
+        color-mix(in srgb, var(--background) 76%, transparent) 55%,
+        color-mix(in srgb, var(--background) 55%, transparent) 100%
+      ),
+      color-mix(in srgb, var(--background) 44%, transparent);
   }
 }
