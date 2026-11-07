@@ -30,10 +30,10 @@ export const RequireAudience = (audience: SessionAudience) =>
   SetMetadata(AUDIENCE_KEY, audience);
 
 /** Cookie names — distinct per origin, __Host- prefix (v1.2 §12.4) */
-export const SESSION_COOKIES = {
+export const SESSION_COOKIES: Record<SessionAudience, string> = {
   customer: "__Host-app_sid",
   admin: "__Host-admin_sid",
-} as const;
+};
 
 interface AuthenticatedRequest extends Request {
   cookies?: Record<string, string>;

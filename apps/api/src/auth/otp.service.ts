@@ -53,12 +53,13 @@ export interface SmsProviderResult {
   providerRef: string;
 }
 
-/** Provider abstraction — dev/testing adapter by default (v1.2 Part 5.B). */
-export interface SmsProvider {
-  send(phone: string, message: string): Promise<SmsProviderResult>;
+/** Provider abstraction — dev/testing adapter by default (v1.2 Part 5.B).
+ *  Abstract class (not interface) so NestJS can use it as a DI token. */
+export abstract class SmsProvider {
+  abstract send(phone: string, message: string): Promise<SmsProviderResult>;
 }
 
-export class DevSmsAdapter implements SmsProvider {
+export class DevSmsAdapter extends SmsProvider {
   private readonly logger = new Logger("DevSmsAdapter");
 
   async send(phone: string, message: string): Promise<SmsProviderResult> {
