@@ -10,6 +10,9 @@ importers:
 
   apps/admin:
     dependencies:
+      '@togi/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       gsap:
         specifier: 3.15.1
         version: 3.15.1
@@ -120,6 +123,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@togi/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       gsap:
         specifier: 3.15.1
         version: 3.15.1

@@ -1,0 +1,541 @@
+/*
+ * THRONE OF GRACE INTEGRATED VENTURES — design tokens
+ * ---------------------------------------------------
+ * SCAFFOLD TOKENS — replace with actual Throne of Grace brand assets
+ * (logo, colours, typography) when supplied. No permanent palette is
+ * chosen here; every brand-dependent value is marked /* SCAFFOLD — brand *\/
+ * so a single file swap rebrands both apps. Planning document v1.2 §1.1.
+ *
+ * Semantic status colours (success/warning/error/info) are NOT brand and
+ * only need review for contrast, not replacement.
+ *
+ * Import order: host app does `@import "tailwindcss"` then
+ * `@import "@togi/ui/tokens.css"` — keep this file free of Tailwind directives.
+ */
+
+:root {
+  /* ── Surfaces & text (brand-swap) ─────────────────────────── */
+  --background: #ffffff; /* SCAFFOLD — brand surface */
+  --surface: #fafafa; /* SCAFFOLD — brand surface */
+  --surface-raised: #ffffff; /* SCAFFOLD — brand surface (cards) */
+  --text: #18181b; /* SCAFFOLD — brand text */
+  --text-muted: #71717a; /* SCAFFOLD — brand muted text */
+  --border: #e4e4e7; /* SCAFFOLD — brand border */
+  --border-strong: #d4d4d8; /* SCAFFOLD — brand border (emphasis) */
+  --primary: #18181b; /* SCAFFOLD — brand primary (no arbitrary green) */
+  --primary-hover: #3f3f46; /* SCAFFOLD — brand primary hover */
+  --primary-contrast: #ffffff; /* SCAFFOLD — brand primary contrast */
+  --accent: #18181b; /* SCAFFOLD — brand accent */
+
+  /* ── Semantic status (not brand) ──────────────────────────── */
+  --success: #15803d;
+  --success-surface: #f0fdf4;
+  --warning: #b45309;
+  --warning-surface: #fffbeb;
+  --error: #b91c1c;
+  --error-surface: #fef2f2;
+  --info: #1d4ed8;
+  --info-surface: #eff6ff;
+  --neutral: #52525b;
+  --neutral-surface: #f4f4f5;
+
+  /* ── Shape & motion ───────────────────────────────────────── */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration: 240ms;
+
+  /* ── Typography (brand-swap: replace font stacks when supplied) ── */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif; /* SCAFFOLD — brand typeface */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; /* SCAFFOLD — brand typeface */
+
+  /* ── Elevation ────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.12);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Component layer — semantic classes used by @togi/ui components.
+ * Plain CSS so the apps need no Tailwind source-scanning of the
+ * package; every rule reads only the tokens above.
+ * ───────────────────────────────────────────────────────────── */
+
+/* Button ------------------------------------------------------ */
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+  font-weight: 550;
+  line-height: 1.2;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration) var(--ease),
+    border-color var(--duration) var(--ease),
+    color var(--duration) var(--ease),
+    transform 120ms var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+.t-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.t-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.t-btn:disabled,
+.t-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.t-btn--primary {
+  background: var(--primary);
+  color: var(--primary-contrast);
+}
+.t-btn--primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.t-btn--secondary {
+  background: var(--surface-raised);
+  color: var(--text);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.t-btn--secondary:hover:not(:disabled) {
+  background: var(--surface);
+  border-color: var(--text-muted);
+}
+
+.t-btn--ghost {
+  background: transparent;
+  color: var(--text);
+}
+.t-btn--ghost:hover:not(:disabled) {
+  background: var(--neutral-surface);
+}
+
+.t-btn--danger {
+  background: var(--error);
+  color: #ffffff;
+}
+.t-btn--danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.t-btn--sm {
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.75rem;
+}
+.t-btn--md {
+  font-size: 0.9375rem;
+  padding: 0.5rem 1rem;
+}
+.t-btn--lg {
+  font-size: 1rem;
+  padding: 0.6875rem 1.375rem;
+}
+.t-btn--block {
+  width: 100%;
+}
+
+.t-btn__spinner {
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: t-spin 0.7s linear infinite;
+}
+
+@keyframes t-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* Fields (input / textarea / select) -------------------------- */
+.t-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-family: var(--font-sans);
+}
+.t-field__label {
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--text);
+}
+.t-field__hint {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.t-field__error {
+  font-size: 0.8125rem;
+  color: var(--error);
+}
+.t-input {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.5625rem 0.75rem;
+  width: 100%;
+  transition:
+    border-color var(--duration) var(--ease),
+    box-shadow var(--duration) var(--ease);
+}
+.t-input::placeholder {
+  color: var(--text-muted);
+}
+.t-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+.t-input[aria-invalid="true"] {
+  border-color: var(--error);
+}
+.t-input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 18%, transparent);
+}
+.t-input:disabled {
+  background: var(--neutral-surface);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+textarea.t-input {
+  min-height: 6.5rem;
+  resize: vertical;
+}
+select.t-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8.5 1.5 4h9z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2rem;
+}
+
+/* Card -------------------------------------------------------- */
+.t-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-sans);
+}
+.t-card--pad {
+  padding: 1.25rem;
+}
+.t-card__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.t-card__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.t-card__body {
+  padding: 1.25rem;
+}
+
+/* Status pill ------------------------------------------------- */
+.t-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.1875rem 0.625rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.t-pill__dot {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-radius: 50%;
+  background: currentcolor;
+  flex: none;
+}
+.t-pill--neutral {
+  color: var(--neutral);
+  background: var(--neutral-surface);
+  border-color: color-mix(in srgb, var(--neutral) 18%, transparent);
+}
+.t-pill--info {
+  color: var(--info);
+  background: var(--info-surface);
+  border-color: color-mix(in srgb, var(--info) 18%, transparent);
+}
+.t-pill--success {
+  color: var(--success);
+  background: var(--success-surface);
+  border-color: color-mix(in srgb, var(--success) 18%, transparent);
+}
+.t-pill--warning {
+  color: var(--warning);
+  background: var(--warning-surface);
+  border-color: color-mix(in srgb, var(--warning) 18%, transparent);
+}
+.t-pill--error {
+  color: var(--error);
+  background: var(--error-surface);
+  border-color: color-mix(in srgb, var(--error) 18%, transparent);
+}
+
+/* Modal ------------------------------------------------------- */
+.t-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.44);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 50;
+  animation: t-fade var(--duration) var(--ease);
+}
+.t-modal {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: min(100%, 32rem);
+  max-height: min(85vh, 48rem);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-sans);
+  animation: t-rise var(--duration) var(--ease);
+}
+.t-modal--lg {
+  width: min(100%, 48rem);
+}
+.t-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.t-modal__title {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+.t-modal__body {
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+.t-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.t-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 160ms var(--ease);
+}
+.t-icon-btn:hover {
+  background: var(--neutral-surface);
+  color: var(--text);
+}
+.t-icon-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@keyframes t-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes t-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+/* Toast ------------------------------------------------------- */
+.t-toast-viewport {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  z-index: 60;
+  pointer-events: none;
+}
+.t-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  min-width: 16rem;
+  max-width: 24rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--neutral);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  color: var(--text);
+  animation: t-slide-in var(--duration) var(--ease);
+}
+.t-toast--success {
+  border-left-color: var(--success);
+}
+.t-toast--error {
+  border-left-color: var(--error);
+}
+.t-toast--warning {
+  border-left-color: var(--warning);
+}
+.t-toast--info {
+  border-left-color: var(--info);
+}
+@keyframes t-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+/* States (empty / error / loading) ---------------------------- */
+.t-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2.5rem 1.5rem;
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+}
+.t-state__icon {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.t-state__title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.t-state__desc {
+  font-size: 0.875rem;
+  margin: 0;
+  max-width: 32rem;
+}
+.t-state__action {
+  margin-top: 0.5rem;
+}
+
+/* Skeleton ---------------------------------------------------- */
+.t-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--neutral-surface) 25%,
+    color-mix(in srgb, var(--neutral-surface) 55%, var(--border)) 50%,
+    var(--neutral-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: t-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes t-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Spinner ----------------------------------------------------- */
+.t-spinner {
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: t-spin 0.7s linear infinite;
+}
+
+/* Table ------------------------------------------------------- */
+.t-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  font-family: var(--font-sans);
+}
+.t-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.t-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0.6875rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.t-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.t-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.t-table tbody tr:hover td {
+  background: var(--surface);
+}
+
+/* Motion preferences — purposeful motion, never mandatory (v1.2 §UI) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
