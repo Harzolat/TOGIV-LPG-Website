@@ -1,10 +1,12 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { ArrowRight, User } from "lucide-react";
 import { useAuth } from "../lib/auth";
 
 /**
  * Customer app shell — premium/minimalist direction, brand palette
  * (blue + red) from shared tokens (v1.2 §1.1).
- * Header: wordmark + primary nav + session action, brand rule beneath.
+ * Header: wordmark + primary nav (underline active state) + Login/Register
+ * pills, brand rule beneath.
  * Route changes replay a short fade-up entrance (purposeful, reduced-motion
  * safe — the global guard in tokens.css neutralises it).
  * Footer: safety notice + policy links.
@@ -31,13 +33,15 @@ function Wordmark() {
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   [
-    "rounded-full px-3.5 py-1.5 text-sm transition-all duration-200",
+    "px-3 py-2 text-sm transition-colors duration-200",
     isActive ? "font-medium" : "hover:opacity-70",
   ].join(" ");
 
+/** Mockup-style active state: brand text + short underline drawn with an
+ *  inset shadow, so switching states causes no layout shift. */
 const navLinkStyle = ({ isActive }: { isActive: boolean }) => ({
   color: isActive ? "var(--primary)" : "var(--text)",
-  background: isActive ? "var(--primary-surface)" : "transparent",
+  boxShadow: isActive ? "inset 0 -2px 0 var(--primary)" : "none",
 });
 
 export default function Layout() {
@@ -65,10 +69,13 @@ export default function Layout() {
               Home
             </NavLink>
             <NavLink to="/request" className={navLinkClass} style={navLinkStyle}>
-              Request a refill
+              Request
             </NavLink>
             <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
               Track
+            </NavLink>
+            <NavLink to="/safety" className={navLinkClass} style={navLinkStyle}>
+              Safety
             </NavLink>
           </nav>
 
@@ -96,13 +103,24 @@ export default function Layout() {
                 </button>
               </>
             ) : (
-              <Link
-                to="/login"
-                className="t-btn t-btn--primary t-btn--sm"
-                style={{ borderRadius: "var(--radius-pill)" }}
-              >
-                Sign in
-              </Link>
+              <>
+                <Link
+                  to="/login"
+                  className="t-btn t-btn--secondary t-btn--sm hidden sm:inline-flex"
+                  style={{ borderRadius: "var(--radius-pill)" }}
+                >
+                  <User size={15} aria-hidden="true" />
+                  Login
+                </Link>
+                <Link
+                  to="/register"
+                  className="t-btn t-btn--primary t-btn--sm"
+                  style={{ borderRadius: "var(--radius-pill)" }}
+                >
+                  Register
+                  <ArrowRight size={15} aria-hidden="true" />
+                </Link>
+              </>
             )}
           </div>
         </div>
@@ -121,6 +139,9 @@ export default function Layout() {
           </NavLink>
           <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
             Track
+          </NavLink>
+          <NavLink to="/safety" className={navLinkClass} style={navLinkStyle}>
+            Safety
           </NavLink>
         </nav>
 

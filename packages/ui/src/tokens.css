@@ -514,9 +514,30 @@ select.t-input {
   animation: t-fade-up 0.45s var(--ease) both;
 }
 
+/* Scroll reveal — cards/rows rise into place once their section enters the
+ * viewport. An IntersectionObserver toggles .is-visible; the transition lives
+ * entirely in CSS, so the reveal can never be interrupted by JS lifecycles
+ * (StrictMode re-runs, HMR) the way scripted from-tweens can. Delay comes
+ * from --reveal-delay for stagger. Defined BEFORE .t-lift so the hover lift
+ * (same specificity) wins by source order on revealed cards. The reduced-
+ * motion guard neutralises the transition; content is visible either way. */
+.t-reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.65s var(--ease),
+    transform 0.65s var(--ease);
+  transition-delay: var(--reveal-delay, 0s);
+}
+.t-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 /* Lift-on-hover for interactive cards/list rows */
 .t-lift {
   transition:
+    opacity var(--duration) var(--ease),
     transform var(--duration) var(--ease),
     box-shadow var(--duration) var(--ease),
     border-color var(--duration) var(--ease);
@@ -617,7 +638,9 @@ select.t-input {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
   }
 }

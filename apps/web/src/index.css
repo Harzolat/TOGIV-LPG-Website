@@ -14,4 +14,24 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  /* clip (not hidden) so .bleed-right can reach the viewport edge without a
+   * horizontal scrollbar when 100vw includes the scrollbar width — and
+   * position: sticky (app header) keeps working, unlike overflow-x: hidden. */
+  overflow-x: clip;
+}
+
+/*
+ * Right-edge bleed for the home hero (mockup: the hero photo runs off the
+ * right side of the viewport). margin percentage resolves against main's
+ * content box; for the centered max-w-5xl container the formula lands the
+ * section edge exactly on the viewport edge. Large screens only — on mobile
+ * the hero stays inside the page gutters.
+ */
+.bleed-right {
+  margin-right: 0;
+}
+@media (min-width: 1024px) {
+  .bleed-right {
+    margin-right: calc((100vw - 100%) / -2);
+  }
 }
