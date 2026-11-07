@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import type { RequestType, SubmitResponse } from "../lib/types";
 import { useAuth } from "../lib/auth";
-import { Button, Field, Select, TextArea, TextInput } from "@togi/ui";
+import { Button, Select, TextArea, TextInput } from "@togi/ui";
 
 /**
  * New request — one flow for all three types (v1.2 §1.4.2).

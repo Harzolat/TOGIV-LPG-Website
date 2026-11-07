@@ -27,7 +27,7 @@ const STEPS = [
 ] as const;
 
 export default function Home() {
-  const scope = useRef<HTMLElement>(null);
+  const scope = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;

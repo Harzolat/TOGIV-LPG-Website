@@ -1,9 +1,7 @@
 import { useId } from "react";
 import type {
-  InputHTMLAttributes,
+  ComponentPropsWithRef,
   ReactNode,
-  SelectHTMLAttributes,
-  TextareaHTMLAttributes,
 } from "react";
 
 /**
@@ -53,7 +51,7 @@ export function Field({ label, hint, error, required, children, className }: Fie
 }
 
 export interface TextInputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithRef<"input">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;
@@ -77,7 +75,7 @@ export function TextInput({ label, hint, error, required, className, ...rest }: 
 }
 
 export interface TextAreaProps
-  extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithRef<"textarea">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;
@@ -101,7 +99,7 @@ export function TextArea({ label, hint, error, required, className, ...rest }: T
 }
 
 export interface SelectProps
-  extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithRef<"select">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;

@@ -1,15 +1,120 @@
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { ToastProvider } from "@togi/ui";
+import Layout from "./components/Layout";
+import { AuthProvider, useAuth } from "./lib/auth";
+import Home from "./pages/Home";
+
+const NewRequest = lazy(() => import("./pages/NewRequest"));
+const Track = lazy(() => import("./pages/Track"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Account = lazy(() => import("./pages/Account"));
+const AccountRequest = lazy(() => import("./pages/AccountRequest"));
+
+function Protected({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="flex justify-center py-24">
+        <span className="t-spinner h-7 w-7" role="status" aria-label="Loading" />
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace state={{ from: window.location.pathname }} />;
+  return <>{children}</>;
+}
+
+function PageFallback() {
+  return (
+    <div className="flex justify-center py-24">
+      <span className="t-spinner h-7 w-7" role="status" aria-label="Loading" />
+    </div>
+  );
+}
+
 export default function App() {
   return (
-    <main className="min-h-screen bg-[var(--background)] text-[var(--text)]">
-      <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Throne of Grace Integrated Ventures
-        </h1>
-        <p className="text-sm text-[var(--text-muted)]">
-          LPG Customer Service &amp; Operations Management Platform — under
-          construction.
-        </p>
-      </div>
-    </main>
+    <BrowserRouter>
+      <ToastProvider>
+        <AuthProvider>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<Home />} />
+              <Route
+                path="request"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <NewRequest />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="track"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <Track />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="track/:token"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <Track />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="login"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <Auth mode="login" />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="register"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <Auth mode="register" />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="account"
+                element={
+                  <Protected>
+                    <Suspense fallback={<PageFallback />}>
+                      <Account />
+                    </Suspense>
+                  </Protected>
+                }
+              />
+              <Route
+                path="account/requests/:id"
+                element={
+                  <Protected>
+                    <Suspense fallback={<PageFallback />}>
+                      <AccountRequest />
+                    </Suspense>
+                  </Protected>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <div className="py-20 text-center">
+                    <h1 className="text-2xl font-semibold">Page not found</h1>
+                    <a href="/" className="t-btn t-btn--secondary t-btn--md mt-6 inline-flex">
+                      Back home
+                    </a>
+                  </div>
+                }
+              />
+            </Route>
+          </Routes>
+        </AuthProvider>
+      </ToastProvider>
+    </BrowserRouter>
   );
 }

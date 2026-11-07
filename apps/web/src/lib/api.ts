@@ -22,6 +22,12 @@ function readCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+/** Readable CSRF cookie (double-submit) — auth endpoints also require it
+ *  as a body field on OTP verification (v1.2 §12.4). */
+export function getCsrfToken(): string | undefined {
+  return readCookie("__Host-customer_csrf");
+}
+
 interface ApiOptions extends Omit<RequestInit, "headers" | "body"> {
   body?: unknown;
   headers?: Record<string, string>;
