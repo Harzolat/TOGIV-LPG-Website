@@ -22,7 +22,7 @@ import {
  *  - "How It Works": intro column + 3 numbered steps joined by connectors
  * Motion is purposeful and reduced-motion safe: a coordinated gsap hero
  * entrance, IntersectionObserver + CSS reveals for below-fold content.
- * The photo is the supplied delivery-rider shot (no mockup imagery used).
+ * The photo is the supplied LPG delivery-truck shot (no mockup imagery used).
  */
 
 const FEATURES = [
@@ -134,8 +134,8 @@ export default function Home() {
               srcSet="/images/lpg-hero-900.jpg 900w, /images/lpg-hero-1600.jpg 1600w"
               sizes="100vw"
               width={1600}
-              height={1067}
-              alt="Delivery rider on a motorcycle loaded with LPG cylinders on a sunny road"
+              height={900}
+              alt="LPG delivery truck with its rear doors open, loaded with refilled cylinders in blue, red, yellow and grey, driving through the city"
               className="block h-full w-full object-cover"
               style={{ objectPosition: "62% center" }}
               decoding="async"
@@ -146,10 +146,12 @@ export default function Home() {
 
         <div className="relative mx-auto w-full max-w-5xl px-5">
           <div className="max-w-2xl">
+            {/* Badge text uses --primary-hover (lighter blue): 5.2:1 on the
+                tinted pill at 12px, where --primary only reaches 4.05:1. */}
             <p
               data-hero-badge
               className="mb-5 inline-flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-4 text-xs font-semibold"
-              style={{ background: "var(--primary-surface)", color: "var(--primary)" }}
+              style={{ background: "var(--primary-surface)", color: "var(--primary-hover)" }}
             >
               <span
                 className="grid h-5 w-5 place-items-center rounded-full"

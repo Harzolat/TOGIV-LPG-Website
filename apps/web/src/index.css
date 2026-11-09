@@ -36,7 +36,8 @@ body {
  * Hero scrim — keeps the left-side copy fully legible over the photo:
  * solid page colour under the text, fading to clear by the right third,
  * plus a light base wash. Mobile gets a stronger top-down wash since
- * copy spans the full width there.
+ * copy spans the full width there. The page colour is the brand navy, so
+ * the photo melts into the page rather than sitting in a white panel.
  */
 .hero-scrim {
   background:
@@ -48,7 +49,10 @@ body {
       color-mix(in srgb, var(--background) 14%, transparent) 78%,
       transparent 100%
     ),
-    color-mix(in srgb, var(--background) 30%, transparent);
+    /* Brand wash over the whole photo: the shot is bright daylight, so it is
+     * tinted into the blue palette instead of sitting on the page as a
+     * near-white block. */
+    color-mix(in srgb, var(--background) 42%, transparent);
 }
 @media (max-width: 639px) {
   .hero-scrim {
@@ -61,4 +65,16 @@ body {
       ),
       color-mix(in srgb, var(--background) 44%, transparent);
   }
+}
+
+/* Bottom blend: without it the daylight photo meets the navy page in a hard
+ * horizontal seam once the hero's full-bleed section ends. */
+.hero-scrim::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 24%;
+  background: linear-gradient(180deg, transparent, var(--background));
+  pointer-events: none;
 }

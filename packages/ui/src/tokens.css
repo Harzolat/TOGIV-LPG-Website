@@ -13,34 +13,46 @@
  */
 
 :root {
-  /* ── Surfaces & text (cool-neutral family, tuned to the blue brand) ── */
-  --background: #ffffff; /* surface */
-  --surface: #f6f8fb; /* surface (cool tint) */
-  --surface-raised: #ffffff; /* surface (cards) */
-  --text: #0f172a; /* text */
-  --text-muted: #64748b; /* muted text */
-  --border: #e4e8f0; /* border */
-  --border-strong: #d3dae6; /* border (emphasis) */
+  /* ── Surfaces & text — SOLID brand blue, no white panels ────
+   * The whole product sits on blue: page, bands and cards are three
+   * solid steps of the same navy, so depth comes from tone + borders
+   * rather than white cards on white. Text is near-white; "white" is
+   * used for type and labels only, never as a surface. */
+  --background: #051c36; /* BRAND — page (deep brand blue) */
+  --surface: #0a2c53; /* BRAND — bands: header, footer, table head */
+  --surface-raised: #123e6e; /* BRAND — cards, modals, toasts */
+  --field: #082648; /* BRAND — inputs (inset against cards) */
+  --text: #eef4ff; /* text */
+  --text-muted: #a7c0e3; /* muted text */
+  --border: #265486; /* BRAND — border */
+  --border-strong: #3570ac; /* BRAND — border (emphasis) */
 
-  /* ── Brand (supplied: blue + red) ─────────────────────────── */
-  --primary: #1a56db; /* BRAND — blue */
-  --primary-hover: #1444b0; /* BRAND — blue (hover) */
-  --primary-contrast: #ffffff; /* on-brand contrast */
-  --primary-surface: #eef4ff; /* BRAND — blue tint (active nav, soft fills) */
-  --accent: #d01f37; /* BRAND — red (emphasis only, never body text) */
-  --accent-surface: #fdeef1; /* BRAND — red tint */
+  /* ── Brand (supplied: blue + red) ───────────────────────────
+   * --primary is the brand blue tuned for dark surfaces: light enough to
+   * be legible as a label/icon colour, so fills labelled with it use a
+   * navy --primary-contrast instead of white. --danger is the solid red
+   * fill (white label) so red still reads as the action colour. */
+  --primary: #7fb0ff; /* BRAND — blue */
+  --primary-hover: #a6c8ff; /* BRAND — blue (hover) */
+  --primary-contrast: #05162e; /* on-brand contrast (navy on blue) */
+  --primary-surface: #164a86; /* BRAND — blue fill (active nav, soft blocks) */
+  --accent: #ff7d88; /* BRAND — red (emphasis text, icons, rules) */
+  --accent-surface: #591523; /* BRAND — red fill */
+  --danger: #d6212f; /* BRAND — solid red action fill */
 
-  /* ── Semantic status (not brand) ──────────────────────────── */
-  --success: #15803d;
-  --success-surface: #f0fdf4;
-  --warning: #b45309;
-  --warning-surface: #fffbeb;
-  --error: #b91c1c;
-  --error-surface: #fef2f2;
-  --info: #1d4ed8;
-  --info-surface: #eff6ff;
-  --neutral: #52525b;
-  --neutral-surface: #f4f4f5;
+  /* ── Semantic status (not brand) ──────────────────────────────
+   * Light ink on deep tinted fills: status colours must stay legible
+   * over blue cards without flooding the page with white. */
+  --success: #7ef0a8;
+  --success-surface: #0b3d26;
+  --warning: #ffd166;
+  --warning-surface: #493207;
+  --error: #ff9aa4;
+  --error-surface: #4e1420;
+  --info: #9cc4ff;
+  --info-surface: #164a86;
+  --neutral: #bfcde3;
+  --neutral-surface: #1a4373;
 
   /* ── Shape & motion ───────────────────────────────────────── */
   --radius: 12px;
@@ -54,10 +66,12 @@
     "Helvetica Neue", Arial, sans-serif; /* SCAFFOLD — brand typeface */
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; /* SCAFFOLD — brand typeface */
 
-  /* ── Elevation ────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.12);
+  /* ── Elevation ────────────────────────────────────────────────
+   * Shadows read much weaker on the dark blue page than on white, so they
+   * are deeper; card borders carry most of the separation. */
+  --shadow-sm: 0 1px 2px rgb(2 10 24 / 0.35);
+  --shadow-md: 0 6px 18px rgb(2 10 24 / 0.42);
+  --shadow-lg: 0 18px 44px rgb(2 10 24 / 0.5);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -115,15 +129,16 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
+/* Outlined, not filled: on blue surfaces a filled secondary button would
+ * disappear into the card behind it. */
 .t-btn--secondary {
-  background: var(--surface-raised);
-  color: var(--text);
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 48%, transparent);
 }
 .t-btn--secondary:hover:not(:disabled) {
-  background: var(--surface);
-  border-color: var(--text-muted);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-color: var(--primary);
 }
 
 .t-btn--ghost {
@@ -135,7 +150,7 @@
 }
 
 .t-btn--danger {
-  background: var(--error);
+  background: var(--danger);
   color: #ffffff;
 }
 .t-btn--danger:hover:not(:disabled) {
@@ -197,7 +212,7 @@
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   color: var(--text);
-  background: var(--surface-raised);
+  background: var(--field);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 0.5625rem 0.75rem;
@@ -231,7 +246,7 @@ textarea.t-input {
 }
 select.t-input {
   appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2371717a' d='M6 8.5 1.5 4h9z'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a7c0e3' d='M6 8.5 1.5 4h9z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2rem;
