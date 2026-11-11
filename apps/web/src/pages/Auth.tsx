@@ -57,9 +57,11 @@ export default function Auth({ mode }: Props) {
     }
     setBusy(true);
     try {
+      // purpose must match the one used on verify, or the API looks for a
+      // code it never issued ("register" codes are separate from "login")
       const res = await api<{ ok: true; csrfToken: string; message: string }>(
         "/auth/otp/request",
-        { method: "POST", body: { phone: phone.trim() } },
+        { method: "POST", body: { phone: phone.trim(), purpose: isRegister ? "register" : "login" } },
       );
       setNotice(res.message);
       setStep("code");

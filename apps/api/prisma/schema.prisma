@@ -35,7 +35,7 @@ enum UserStatus {
 
 model User {
   id           String     @id @default(uuid())
-  phone        String     @unique // see partial-index migration note above
+  phone        String // unique among non-deleted rows — partial index, see note above
   email        String?    @unique
   passwordHash String?
   kind         UserKind   @default(customer)

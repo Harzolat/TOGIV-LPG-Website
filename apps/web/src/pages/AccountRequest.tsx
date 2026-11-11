@@ -48,7 +48,7 @@ export default function AccountRequest() {
       await load();
     } catch (err) {
       toast({
-        message: err instanceof ApiError ? err.message : "Could not cancel this request.",
+        message: err instanceof ApiError ? err.message : "Couldn’t cancel this request.",
         tone: "error",
       });
     } finally {
@@ -87,7 +87,8 @@ export default function AccountRequest() {
     );
   }
 
-  const canCancel = (CUSTOMER_CANCELABLE_STATUSES as readonly RequestStatus[]).includes(data.status);
+  const canCancel =
+    (CUSTOMER_CANCELABLE_STATUSES as readonly RequestStatus[]).includes(data.status);
   const visibleHistory = data.statusHistory.filter((h) => h.visibleToCustomer);
 
   return (
@@ -95,6 +96,12 @@ export default function AccountRequest() {
       <Link to="/account" className="text-sm" style={{ color: "var(--text-muted)" }}>
         ← Back to my requests
       </Link>
+
+      {data.contactPhone ? (
+        <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+          Contact: {data.contactPhone}
+        </p>
+      ) : null}
 
       <div className="mt-4 flex items-start justify-between gap-4">
         <div>
@@ -206,6 +213,25 @@ export default function AccountRequest() {
                     timeStyle: "short",
                   })}
                 </p>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+
+      {/* Attachments (when the API surfaces them) */}
+      {data.attachments && data.attachments.length > 0 ? (
+        <Card className="mt-5" padded title="Attachments">
+          <ul className="space-y-3">
+            {data.attachments.map((a) => (
+              <li key={a.id} className="flex items-center justify-between gap-3">
+                <span className="text-sm">{a.name ?? a.kind}</span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {new Date(a.createdAt).toLocaleString(undefined, {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </span>
               </li>
             ))}
           </ul>

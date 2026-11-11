@@ -75,10 +75,14 @@ export class SessionService {
       throw new UnauthorizedException("Account is not active.");
     }
 
-    // Sliding idle window (bounded by absolute expiry)
+    // Sliding idle window, capped by an absolute lifetime measured from issue
+    // time. (Previously this clamped against the *previous* expiresAt, which
+    // ratcheted the session down to the idle window and logged active
+    // customers out after 7 days instead of 30.)
     const idle = AUDIENCE[audience].idleMs;
-    const slidExpiry = Math.min(Date.now() + idle, session.expiresAt.getTime());
-    if (slidExpiry - Date.now() > 0) {
+    const absoluteCap = session.createdAt.getTime() + AUDIENCE[audience].absoluteMs;
+    const slidExpiry = Math.min(Date.now() + idle, absoluteCap);
+    if (slidExpiry > session.expiresAt.getTime()) {
       await this.prisma.session.update({
         where: { id: session.id },
         data: { expiresAt: new Date(slidExpiry) },

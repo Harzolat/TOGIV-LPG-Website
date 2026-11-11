@@ -175,8 +175,12 @@ export default function Account() {
                     <span className="block truncate font-mono text-sm font-semibold">{r.reference}</span>
                     <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
                       {r.type}
-                      {r.deliveryMethod ? ` · ${r.deliveryMethod} delivery` : ""} ·{" "}
-                      {formatDate(r.createdAt)}
+                      {r.deliveryMethod === "home"
+                        ? " · home delivery"
+                        : r.deliveryMethod === "station"
+                          ? " · station pick-up"
+                          : ""}{" "}
+                      · {formatDate(r.createdAt)}
                     </span>
                   </span>
                   <StatusPill status={r.status} />

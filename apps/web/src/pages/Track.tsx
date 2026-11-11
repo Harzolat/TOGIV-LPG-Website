@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import type { RequestType, RequestStatus, TrackPayload } from "../lib/types";
 import { Button, EmptyState, ErrorState, Skeleton, StatusPill } from "@togi/ui";
@@ -99,6 +99,7 @@ function Timeline({ type, status }: { type: RequestType; status: RequestStatus }
 
 export default function Track() {
   const { token } = useParams<{ token: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<TrackPayload | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error" | "idle">(token ? "loading" : "idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -124,6 +125,16 @@ export default function Track() {
     if (token) void load(token);
   }, [token, load]);
 
+  /** Leave the failed state behind — either back to the paste form, or onto
+   *  the token's own route when the failure came from the URL. */
+  const reset = () => {
+    setErrorMsg("");
+    setData(null);
+    setInput("");
+    setState("idle");
+    if (token) navigate("/track", { replace: true });
+  };
+
   if (state === "loading") {
     return (
       <div className="mx-auto max-w-xl space-y-4">
@@ -141,9 +152,9 @@ export default function Track() {
           title="We couldn't open this tracking link"
           description={errorMsg}
           action={
-            <Link to="/track" className="t-btn t-btn--secondary t-btn--md">
+            <Button variant="secondary" onClick={reset}>
               Try a different link
-            </Link>
+            </Button>
           }
         />
       </div>
@@ -205,13 +216,15 @@ export default function Track() {
           // Accept either the full path (/track/<token>) or the bare token
           const match = value.match(/\/track\/([A-Za-z0-9_-]{16,128})/);
           const raw = match ? match[1] : value;
-          if (/^[A-Za-z0-9_-]{16,128}$/.test(raw)) {
-            window.history.pushState(null, "", `/track/${raw}`);
-            void load(raw);
-          } else {
+          if (!/^[A-Za-z0-9_-]{16,128}$/.test(raw)) {
             setState("error");
             setErrorMsg("That doesn't look like a tracking link. It should look like yoursite.com/track/…");
+            return;
           }
+          // Route change reloads via the effect; the same token needs a manual
+          // retry (e.g. after a transient failure) or nothing would re-run.
+          if (raw === token) void load(raw);
+          else navigate(`/track/${raw}`, { replace: true });
         }}
       >
         <label className="sr-only" htmlFor="track-link">

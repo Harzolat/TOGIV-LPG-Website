@@ -1,8 +1,10 @@
 /**
  * Typed API client for the customer app.
  * - Same-origin `/api/v1` via Vite proxy (credentials included)
- * - Double-submit CSRF: reads the `__Host-customer_csrf` cookie set by the
- *   auth endpoints and echoes it in `x-csrf-token` on mutations (v1.2 §12.4)
+ * - Double-submit CSRF: reads the `customer_csrf` cookie set by the auth
+ *   endpoints and echoes it in `x-csrf-token` on mutations (v1.2 §12.4).
+ *   Production names the cookie `__Host-customer_csrf`, so both spellings
+ *   are accepted here.
  * - Normalises error bodies to `ApiError(status, message)`
  */
 
@@ -17,15 +19,24 @@ export class ApiError extends Error {
   }
 }
 
+const CSRF_COOKIE = "customer_csrf";
+
+/** Look up a cookie by name, ignoring the `__Host-` prefix the API adds in
+ *  production (browsers only accept that prefix over https). */
 function readCookie(name: string): string | undefined {
-  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : undefined;
+  for (const part of document.cookie.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name || key === `__Host-${name}`) {
+      return decodeURIComponent(value.join("="));
+    }
+  }
+  return undefined;
 }
 
 /** Readable CSRF cookie (double-submit) — auth endpoints also require it
  *  as a body field on OTP verification (v1.2 §12.4). */
 export function getCsrfToken(): string | undefined {
-  return readCookie("__Host-customer_csrf");
+  return readCookie(CSRF_COOKIE);
 }
 
 interface ApiOptions extends Omit<RequestInit, "headers" | "body"> {
@@ -33,7 +44,24 @@ interface ApiOptions extends Omit<RequestInit, "headers" | "body"> {
   headers?: Record<string, string>;
 }
 
+/**
+ * Public entry point. A 403 "CSRF validation failed" means the readable
+ * cookie lapsed while the session stayed valid (its TTL is shorter): mint a
+ * fresh pair from /auth/csrf and replay the call exactly once.
+ */
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
+  try {
+    return await send<T>(path, options);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403 && /csrf/i.test(e.message)) {
+      await send("/auth/csrf");
+      return await send<T>(path, options);
+    }
+    throw e;
+  }
+}
+
+async function send<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
   const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
 
@@ -44,7 +72,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   }
 
   if (method !== "GET" && method !== "HEAD") {
-    const csrf = readCookie("__Host-customer_csrf");
+    const csrf = readCookie(CSRF_COOKIE);
     if (csrf) headers["x-csrf-token"] = csrf;
   }
 

@@ -186,19 +186,19 @@ export default function Layout() {
             </p>
             <ul className="mt-2 space-y-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
               <li>
-                <a className="hover:underline" href="/privacy">
+                <Link className="hover:underline" to="/privacy">
                   Privacy &amp; data protection
-                </a>
+                </Link>
               </li>
               <li>
-                <a className="hover:underline" href="/safety">
+                <Link className="hover:underline" to="/safety">
                   Safety information
-                </a>
+                </Link>
               </li>
               <li>
-                <a className="hover:underline" href="/terms">
+                <Link className="hover:underline" to="/terms">
                   Terms of service
-                </a>
+                </Link>
               </li>
             </ul>
           </div>

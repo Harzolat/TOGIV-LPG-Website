@@ -135,11 +135,13 @@ export async function ensureSuperAdmin(
   const role = await prisma.role.findUnique({ where: { key: "super_admin" } });
   if (!role) throw new Error("Run seedRbac first.");
 
-  const user = await prisma.user.upsert({
-    where: { phone },
-    update: { kind: "staff", status: "active", ...(email ? { email } : {}) },
-    create: { phone, kind: "staff", status: "active", ...(email ? { email } : {}) },
-  });
+  // phone is unique only among non-deleted rows (partial index), so upsert
+  // on phone isn't available — find the live row or create a new one.
+  const identified = { kind: "staff" as const, status: "active" as const, ...(email ? { email } : {}) };
+  const current = await prisma.user.findFirst({ where: { phone, deletedAt: null } });
+  const user = current
+    ? await prisma.user.update({ where: { id: current.id }, data: identified })
+    : await prisma.user.create({ data: { phone, ...identified } });
 
   // Initial password (staff auth = password + TOTP per §12). Only set when
   // provided — re-runs never overwrite an existing password.

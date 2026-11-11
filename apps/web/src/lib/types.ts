@@ -70,6 +70,12 @@ export interface RequestDetail extends RequestListItem {
     windowLabel?: string | null;
     createdAt: string;
   }>;
+  attachments?: Array<{
+    id: string;
+    name: string | null;
+    kind: string;
+    createdAt: string;
+  }>;
 }
 
 export interface LinkCandidate {

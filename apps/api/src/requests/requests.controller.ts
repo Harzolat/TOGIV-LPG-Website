@@ -12,7 +12,8 @@ import {
 } from "@nestjs/common";
 import { PrismaClient, RequestType } from "@prisma/client";
 import type { AuthedRequest } from "../auth/auth.guard";
-import { RequireAudience, RequirePermission, SESSION_COOKIES } from "../auth/auth.guard";
+import { RequireAudience, RequirePermission } from "../auth/auth.guard";
+import { sessionCookieName } from "../auth/cookie-names";
 import { ensureCustomerProfile } from "../auth/customer-profile";
 import { SessionService } from "../auth/session.service";
 import { TransitionError } from "@togi/shared";
@@ -67,7 +68,7 @@ export class RequestsController {
     let requestedById: string | null = null;
     const token =
       (req as AuthedRequest & { cookies?: Record<string, string> }).cookies?.[
-        SESSION_COOKIES.customer
+        sessionCookieName("customer")
       ];
     if (token) {
       try {

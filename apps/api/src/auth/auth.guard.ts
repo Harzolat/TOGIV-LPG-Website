@@ -8,6 +8,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { PrismaClient, User } from "@prisma/client";
 import { SessionService, SessionAudience } from "./session.service";
+import { sessionCookieName } from "./cookie-names";
 
 /**
  * RBAC + resource-scoped authorization — v1.2 §1.3 (approved matrix).
@@ -28,12 +29,6 @@ export const RequirePermission = (permission: string) =>
 
 export const RequireAudience = (audience: SessionAudience) =>
   SetMetadata(AUDIENCE_KEY, audience);
-
-/** Cookie names — distinct per origin, __Host- prefix (v1.2 §12.4) */
-export const SESSION_COOKIES: Record<SessionAudience, string> = {
-  customer: "__Host-app_sid",
-  admin: "__Host-admin_sid",
-};
 
 export interface AuthedRequest extends Request {
   user?: User;
@@ -65,11 +60,13 @@ export class AuthGuard implements CanActivate {
 
     // Cookie selection: metadata pins the audience; otherwise prefer the
     // customer cookie, falling back to admin (dual-audience detail routes).
+    const customerCookie = sessionCookieName("customer");
+    const adminCookie = sessionCookieName("admin");
     const cookieName = audience
-      ? SESSION_COOKIES[audience]
-      : request.cookies?.[SESSION_COOKIES.customer]
-        ? SESSION_COOKIES.customer
-        : SESSION_COOKIES.admin;
+      ? sessionCookieName(audience)
+      : request.cookies?.[customerCookie]
+        ? customerCookie
+        : adminCookie;
     const token = request.cookies?.[cookieName];
 
     if (!token) {
@@ -80,7 +77,7 @@ export class AuthGuard implements CanActivate {
     }
 
     const effectiveAudience: SessionAudience =
-      cookieName === SESSION_COOKIES.admin ? "admin" : "customer";
+      cookieName === adminCookie ? "admin" : "customer";
 
     // Metadata routes: invalid/expired session is a hard 401.
     // Optional routes (no metadata): stale cookie degrades to anonymous.

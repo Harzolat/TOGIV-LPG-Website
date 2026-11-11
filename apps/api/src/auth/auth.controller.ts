@@ -13,7 +13,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { normalizeNgPhone, PhoneNormalizationError } from "../common/phone";
 import { OtpService, OtpInvalidError, OtpThrottledError } from "./otp.service";
-import { SESSION_COOKIES } from "./auth.guard";
+import { csrfCookieName, sessionCookieName } from "./cookie-names";
 import {
   audienceFrom,
   assertOrigin,
@@ -30,7 +30,15 @@ import { SessionAudience, SessionService } from "./session.service";
  * - Cross-audience sessions impossible: separate cookie names per origin
  */
 
-const phoneSchema = z.object({ phone: z.string().min(6).max(20) });
+const purposeSchema = z.enum(["login", "register", "recovery"]);
+
+/** `purpose` decides which code the request can be verified against: the
+ *  issued code must carry the same purpose, otherwise registration asks for
+ *  a "register" code that was never minted and always fails. */
+const phoneSchema = z.object({
+  phone: z.string().min(6).max(20),
+  purpose: purposeSchema.default("login"),
+});
 const verifySchema = phoneSchema.extend({
   code: z.string().regex(/^\d{6}$/, "6-digit code required"),
   purpose: z.enum(["login", "register", "recovery"]),
@@ -76,7 +84,7 @@ export class AuthController {
     }
 
     try {
-      await this.otp.issue(phone, "login", req.ip);
+      await this.otp.issue(phone, parsed.data.purpose, req.ip);
     } catch (e) {
       if (e instanceof OtpThrottledError) {
         res.setHeader("Retry-After", Math.ceil(e.retryAfterMs / 1000));
@@ -126,7 +134,11 @@ export class AuthController {
     }
 
     // Find or create the user for this phone (register creates; login requires)
-    const existing = await this.prisma.user.findUnique({ where: { phone } });
+    // phone is uniquely indexed only among non-deleted rows (partial index),
+    // so this is a filtered lookup rather than a unique one.
+    const existing = await this.prisma.user.findFirst({
+      where: { phone, deletedAt: null },
+    });
     if (parsed.data.purpose === "login" && !existing) {
       throw new ForbiddenException("No account found for this number. Please register.");
     }
@@ -175,24 +187,35 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const audience = audienceFrom(req);
-    const token = req.cookies?.[SESSION_COOKIES[audience]];
+    const token = req.cookies?.[sessionCookieName(audience)];
     if (token) await this.sessions.revoke(token);
-    res.clearCookie(SESSION_COOKIES[audience], { path: "/" });
+    res.clearCookie(sessionCookieName(audience), { path: "/" });
   }
 
   @Get("me")
-  async me(@Req() req: CsrfRequest) {
+  async me(@Req() req: CsrfRequest, @Res({ passthrough: true }) res: Response) {
     const audience = audienceFrom(req);
-    const token = req.cookies?.[SESSION_COOKIES[audience]];
+    const token = req.cookies?.[sessionCookieName(audience)];
     if (!token) throw new ForbiddenException("Not authenticated.");
     const user = await this.sessions.resolve(token, audience);
-    return { id: user.id, phone: user.phone, kind: user.kind };
+    // The CSRF cookie is short-lived (1h) while the session is not: refresh
+    // the pair on every app bootstrap so a returning customer isn't locked
+    // out of mutations with a valid session but no readable token.
+    const csrfToken = issueCsrf(res, audience);
+    return { id: user.id, phone: user.phone, kind: user.kind, csrfToken };
+  }
+
+  /** Mints a fresh double-submit CSRF pair — public, no session needed.
+   *  Lets the client recover when its CSRF cookie expired mid-session. */
+  @Get("csrf")
+  async csrf(@Req() req: CsrfRequest, @Res({ passthrough: true }) res: Response) {
+    return { csrfToken: issueCsrf(res, audienceFrom(req)) };
   }
 
   // ── CSRF (body-vs-cookie double submit on OTP verify, §12.4) ─────
 
   private assertCsrf(req: CsrfRequest, audience: SessionAudience, header: string): void {
-    const cookie = req.cookies?.[`__Host-${audience}_csrf`];
+    const cookie = req.cookies?.[csrfCookieName(audience)];
     if (!cookie || cookie !== header) {
       throw new ForbiddenException("CSRF validation failed.");
     }

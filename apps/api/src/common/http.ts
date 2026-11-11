@@ -1,6 +1,6 @@
 import { ForbiddenException } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import { SESSION_COOKIES } from "../auth/auth.guard";
+import { csrfCookieName, sessionAudienceFromCookies } from "../auth/cookie-names";
 
 /**
  * Browser request hygiene middleware (v1.2 §12.4) — runs before guards:
@@ -9,7 +9,7 @@ import { SESSION_COOKIES } from "../auth/auth.guard";
  *    customer or admin origin. No reflection, never '*'.
  * 2. Double-submit CSRF: state-changing methods (POST/PUT/PATCH/DELETE) that
  *    carry a session cookie must present the matching `x-csrf-token` header
- *    equal to the readable `__Host-<audience>_csrf` cookie. Requests without
+ *    equal to the readable `<audience>_csrf` cookie. Requests without
  *    a session cookie (guest submissions, OTP endpoints) pass — they are
  *    Origin-checked and hold no ambient authority.
  */
@@ -17,10 +17,12 @@ import { SESSION_COOKIES } from "../auth/auth.guard";
 const CSRF_HEADER = "x-csrf-token";
 const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+/** Customer origin first, admin origin second. Defaults match the Vite
+ *  configs in apps/web and apps/admin so a checkout without .env still works. */
 export function allowedOrigins(): string[] {
   return [
-    process.env.WEB_ORIGIN ?? "http://localhost:5173",
-    process.env.ADMIN_ORIGIN ?? "http://localhost:5174",
+    process.env.WEB_ORIGIN ?? "http://localhost:5175",
+    process.env.ADMIN_ORIGIN ?? "http://localhost:5176",
   ];
 }
 
@@ -33,17 +35,15 @@ export function browserSecurityMiddleware(req: Request, _res: Response, next: Ne
 
   if (MUTATING.has(req.method)) {
     const cookies = (req as Request & { cookies?: Record<string, string> }).cookies ?? {};
-    const sessionCookie: string | null = cookies[SESSION_COOKIES.admin]
-      ? SESSION_COOKIES.admin
-      : cookies[SESSION_COOKIES.customer]
-        ? SESSION_COOKIES.customer
-        : null;
+    const audience = sessionAudienceFromCookies(cookies);
 
-    if (sessionCookie) {
-      const audience = sessionCookie === SESSION_COOKIES.admin ? "admin" : "customer";
-      const csrfCookie = cookies[`__Host-${audience}_csrf`];
+    if (audience) {
+      const csrfCookie = cookies[csrfCookieName(audience)];
       const csrfHeader = req.headers[CSRF_HEADER];
       const headerValue = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
+      // A session cookie without a readable CSRF cookie means the pair was
+      // broken (e.g. a cookie rejected by the browser): treat it as no
+      // session rather than silently accepting an unprotected mutation.
       if (!csrfCookie || !headerValue || csrfCookie !== headerValue) {
         next(new ForbiddenException("CSRF validation failed."));
         return;

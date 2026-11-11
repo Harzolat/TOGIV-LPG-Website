@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { ToastProvider } from "@togi/ui";
 import Layout from "./components/Layout";
 import { AuthProvider, useAuth } from "./lib/auth";
@@ -138,9 +138,9 @@ export default function App() {
                 element={
                   <div className="py-20 text-center">
                     <h1 className="text-2xl font-semibold">Page not found</h1>
-                    <a href="/" className="t-btn t-btn--secondary t-btn--md mt-6 inline-flex">
+                    <Link to="/" className="t-btn t-btn--secondary t-btn--md mt-6 inline-flex">
                       Back home
-                    </a>
+                    </Link>
                   </div>
                 }
               />
