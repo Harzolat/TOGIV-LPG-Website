@@ -47,7 +47,10 @@ import { SessionService } from "./session.service";
 
 const loginSchema = z.object({
   identifier: z.string().trim().min(3).max(200),
-  password: z.string().min(8).max(200),
+  // Login validates presence, not policy: the password may have been set
+  // before the current policy (or by an operator bootstrap), and rejecting
+  // it here would leak policy state instead of just failing authentication.
+  password: z.string().min(1).max(200),
   totpCode: z.string().regex(/^\d{6}$/).optional(),
 });
 

@@ -75,7 +75,7 @@ export default function Login() {
       setError("Enter your work email or phone number.");
       return;
     }
-    if (password.length < 8) {
+    if (!password) {
       setError("Enter your password.");
       return;
     }

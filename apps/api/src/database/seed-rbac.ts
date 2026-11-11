@@ -143,8 +143,9 @@ export async function ensureSuperAdmin(
     ? await prisma.user.update({ where: { id: current.id }, data: identified })
     : await prisma.user.create({ data: { phone, ...identified } });
 
-  // Initial password (staff auth = password + TOTP per §12). Only set when
-  // provided — re-runs never overwrite an existing password.
+  // Initial password (staff auth = password + TOTP per §12). Re-running the
+  // seed with SEED_SUPER_ADMIN_PASSWORD resets it — useful for a local
+  // bootstrap, but keep the env file out of version control.
   if (password) {
     const bcrypt = await import("bcryptjs");
     const hash = await bcrypt.hash(password, 10);

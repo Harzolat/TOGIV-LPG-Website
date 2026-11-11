@@ -174,12 +174,21 @@ export class RequestsController {
   @Get()
   @RequireAudience("admin")
   @RequirePermission("request:view_all")
-  async list(@Query() query: Record<string, string | undefined>) {
+  async list(@Query() query: Record<string, string | string[] | undefined>) {
+    // Repeated params (`?status=Submitted&status=Received`) arrive as an
+    // array; a single value arrives as a string. Both mean "any of".
+    const statuses = Array.isArray(query.status)
+      ? query.status
+      : query.status
+        ? [query.status]
+        : [];
+    const type = Array.isArray(query.type) ? query.type[0] : query.type;
+
     const rows = await this.prisma.serviceRequest.findMany({
       where: {
         deletedAt: null,
-        ...(query.status ? { status: query.status as never } : {}),
-        ...(query.type ? { type: query.type as RequestType } : {}),
+        ...(statuses.length ? { status: { in: statuses as never } } : {}),
+        ...(type ? { type: type as RequestType } : {}),
       },
       orderBy: { createdAt: "desc" },
       select: {
