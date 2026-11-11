@@ -37,6 +37,7 @@
   --primary-contrast: #05162e; /* on-brand contrast (navy on blue) */
   --primary-surface: #164a86; /* BRAND — blue fill (active nav, soft blocks) */
   --accent: #ff7d88; /* BRAND — red (emphasis text, icons, rules) */
+  --accent-text: #ff9aa2; /* BRAND — red for small text on raised cards (AA) */
   --accent-surface: #591523; /* BRAND — red fill */
   --danger: #d6212f; /* BRAND — solid red action fill */
 

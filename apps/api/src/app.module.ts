@@ -10,6 +10,7 @@ import { SessionService } from "./auth/session.service";
 import { StaffAuthController } from "./auth/staff.controller";
 import { ClaimService } from "./claims/claim.service";
 import { ClaimsController } from "./claims/claim.controller";
+import { CustomersController } from "./customers/customers.controller";
 import { DeliveryService } from "./deliveries/delivery.service";
 import { OutboxWorker } from "./notifications/outbox.worker";
 import { QrController } from "./qr/qr.controller";
@@ -39,7 +40,14 @@ const smsProvider: SmsProvider = new DevSmsAdapter(); // launch: swap via env
 
 @Module({
   imports: [],
-  controllers: [AuthController, StaffAuthController, QrController, RequestsController, ClaimsController],
+  controllers: [
+    AuthController,
+    StaffAuthController,
+    QrController,
+    RequestsController,
+    ClaimsController,
+    CustomersController,
+  ],
   providers: [
     prismaProvider,
     { provide: SmsProvider, useValue: smsProvider },
