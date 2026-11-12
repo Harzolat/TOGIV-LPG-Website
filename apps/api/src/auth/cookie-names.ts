@@ -30,12 +30,30 @@ export function csrfCookieName(audience: SessionAudience): string {
   return `${prefix()}${audience}_csrf`;
 }
 
-/** Whichever audience currently holds a session cookie (admin wins ties). */
+/** Whichever audience currently holds a session cookie (customer wins ties,
+ *  matching the guard's cookie preference for dual-audience routes). */
 export function sessionAudienceFromCookies(
   cookies: Record<string, string | undefined> | undefined,
 ): SessionAudience | null {
   if (!cookies) return null;
-  if (cookies[sessionCookieName("admin")]) return "admin";
   if (cookies[sessionCookieName("customer")]) return "customer";
+  if (cookies[sessionCookieName("admin")]) return "admin";
   return null;
+}
+
+/**
+ * The audience the calling SPA declares via `x-togi-audience`.
+ *
+ * Needed because same-origin GETs carry no `Origin` header and localhost
+ * shares cookies across ports: without an explicit declaration, a signed-in
+ * admin console would make the customer app read the admin session. The
+ * value only selects which cookie name to read — it grants no authority on
+ * its own, so a forged value can at most make the caller anonymous.
+ */
+export function declaredAudience(
+  headers: Record<string, string | string[] | undefined> | undefined,
+): SessionAudience | null {
+  const raw = headers?.["x-togi-audience"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === "admin" || value === "customer" ? value : null;
 }

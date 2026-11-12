@@ -63,7 +63,13 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
 
 async function send<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const method = (options.method ?? "GET").toUpperCase();
-  const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    // Declares which cookie pair this SPA owns (same-origin GETs send no
+    // Origin, and localhost shares cookies across ports).
+    "x-togi-audience": "customer",
+    ...options.headers,
+  };
 
   let body: string | undefined;
   if (options.body !== undefined) {

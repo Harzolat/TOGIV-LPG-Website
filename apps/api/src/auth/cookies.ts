@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { allowedOrigins } from "../common/http";
 import {
   csrfCookieName,
+  declaredAudience,
   secureCookies,
   sessionAudienceFromCookies,
   sessionCookieName,
@@ -33,6 +34,11 @@ export type CookieAwareRequest = Request;
  * under the admin name and break the customer flow.
  */
 export function audienceFrom(req: CookieAwareRequest): SessionAudience {
+  // The calling SPA declares its audience; see declaredAudience() for why
+  // Origin + cookie sniffing alone is ambiguous on localhost.
+  const declared = declaredAudience(req.headers);
+  if (declared) return declared;
+
   const origin = req.headers.origin;
   if (origin) {
     const [web, admin] = allowedOrigins();

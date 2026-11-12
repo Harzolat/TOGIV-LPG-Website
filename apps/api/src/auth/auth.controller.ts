@@ -190,6 +190,7 @@ export class AuthController {
     const token = req.cookies?.[sessionCookieName(audience)];
     if (token) await this.sessions.revoke(token);
     res.clearCookie(sessionCookieName(audience), { path: "/" });
+    res.clearCookie(csrfCookieName(audience), { path: "/" });
   }
 
   @Get("me")
@@ -197,7 +198,16 @@ export class AuthController {
     const audience = audienceFrom(req);
     const token = req.cookies?.[sessionCookieName(audience)];
     if (!token) throw new ForbiddenException("Not authenticated.");
-    const user = await this.sessions.resolve(token, audience);
+    const user = await this.sessions.resolve(token, audience).catch(() => {
+      // Dead session (expired/revoked) left in the jar would otherwise make
+      // every later mutation look CSRF-broken, because the pair can no longer
+      // be refreshed for a session that doesn't resolve. Drop both cookies so
+      // the browser starts clean and the visitor can request a new code.
+      res.clearCookie(sessionCookieName(audience), { path: "/" });
+      res.clearCookie(csrfCookieName(audience), { path: "/" });
+      return null;
+    });
+    if (!user) throw new ForbiddenException("Not authenticated.");
     // The CSRF cookie is short-lived (1h) while the session is not: refresh
     // the pair on every app bootstrap so a returning customer isn't locked
     // out of mutations with a valid session but no readable token.

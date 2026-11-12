@@ -1,6 +1,12 @@
 import { ForbiddenException } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import { csrfCookieName, sessionAudienceFromCookies } from "../auth/cookie-names";
+import {
+  csrfCookieName,
+  declaredAudience,
+  sessionAudienceFromCookies,
+  sessionCookieName,
+} from "../auth/cookie-names";
+import type { SessionAudience } from "../auth/session.service";
 
 /**
  * Browser request hygiene middleware (v1.2 §12.4) — runs before guards:
@@ -35,9 +41,23 @@ export function browserSecurityMiddleware(req: Request, _res: Response, next: Ne
 
   if (MUTATING.has(req.method)) {
     const cookies = (req as Request & { cookies?: Record<string, string> }).cookies ?? {};
-    const audience = sessionAudienceFromCookies(cookies);
+    // Audience follows the page that issued the request (Origin), not the
+    // cookie jar: cookies are shared across ports on localhost, so a signed-in
+    // admin console would otherwise make the middleware demand the *admin*
+    // CSRF token from the customer app (and vice versa) — a permanent
+    // mismatch, because each app only ever sends its own audience's token.
+    const [web, admin] = allowedOrigins();
+    const audience: SessionAudience =
+      declaredAudience(req.headers as Record<string, string | string[] | undefined>) ??
+      (origin === admin
+        ? "admin"
+        : origin === web
+          ? "customer"
+          : (sessionAudienceFromCookies(cookies) ?? "customer"));
 
-    if (audience) {
+    // Only enforce when this audience actually holds a session; guests and
+    // the other audience's cookies carry no ambient authority here.
+    if (cookies[sessionCookieName(audience)]) {
       const csrfCookie = cookies[csrfCookieName(audience)];
       const csrfHeader = req.headers[CSRF_HEADER];
       const headerValue = Array.isArray(csrfHeader) ? csrfHeader[0] : csrfHeader;
