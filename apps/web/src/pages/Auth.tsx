@@ -33,6 +33,7 @@ export default function Auth({ mode }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [devCode, setDevCode] = useState<string | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
 
   const isRegister = mode === "register";
@@ -59,11 +60,18 @@ export default function Auth({ mode }: Props) {
     try {
       // purpose must match the one used on verify, or the API looks for a
       // code it never issued ("register" codes are separate from "login")
-      const res = await api<{ ok: true; csrfToken: string; message: string }>(
-        "/auth/otp/request",
-        { method: "POST", body: { phone: phone.trim(), purpose: isRegister ? "register" : "login" } },
-      );
+      const res = await api<{
+        ok: true;
+        csrfToken: string;
+        message: string;
+        devCode?: string;
+      }>("/auth/otp/request", {
+        method: "POST",
+        body: { phone: phone.trim(), purpose: isRegister ? "register" : "login" },
+      });
       setNotice(res.message);
+      // Present only when the API runs in dev with OTP_DEV_ECHO=true.
+      setDevCode(res.devCode ?? null);
       setStep("code");
       // Focus the code input once rendered
       setTimeout(() => codeRef.current?.focus(), 50);
@@ -154,6 +162,17 @@ export default function Auth({ mode }: Props) {
               <strong style={{ color: "var(--text)" }}>{phone}</strong>
             </p>
 
+            {devCode ? (
+              <div
+                role="status"
+                className="rounded-lg px-3 py-2 text-sm"
+                style={{ background: "var(--accent-surface)", color: "var(--accent-text)" }}
+              >
+                Development mode — no SMS is sent. Your code is{" "}
+                <strong style={{ letterSpacing: "0.14em" }}>{devCode}</strong>
+              </div>
+            ) : null}
+
             <TextInput
               ref={codeRef}
               className="t-field--code"
@@ -181,6 +200,7 @@ export default function Auth({ mode }: Props) {
                   setStep("phone");
                   setCode("");
                   setError(null);
+                  setDevCode(null);
                 }}
               >
                 Change number

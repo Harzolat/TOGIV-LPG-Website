@@ -32,6 +32,16 @@ const MAX_BACKOFF_MS = 15 * 60 * 1000; // hard cap: 15 minutes
 
 export type OtpPurpose = "login" | "register" | "recovery";
 
+/**
+ * Local development only: with OTP_DEV_ECHO=true and NODE_ENV !== "production"
+ * the issued code is echoed to the client, so the flow can be exercised
+ * without an SMS gateway. Both conditions are required — a production deploy
+ * never echoes a live code, even if the flag leaks into its environment.
+ */
+function devEchoEnabled(): boolean {
+  return process.env.NODE_ENV !== "production" && process.env.OTP_DEV_ECHO === "true";
+}
+
 export class OtpThrottledError extends Error {
   constructor(
     public readonly retryAfterMs: number,
@@ -79,7 +89,11 @@ export class OtpService {
   ) {}
 
   /** Issues a new OTP, enforcing cooldown + send windows (self-recovering). */
-  async issue(phone: string, purpose: OtpPurpose, ip?: string): Promise<void> {
+  async issue(
+    phone: string,
+    purpose: OtpPurpose,
+    ip?: string,
+  ): Promise<{ devCode?: string }> {
     const now = Date.now();
 
     // Resend cooldown: most recent code for this phone+purpose
@@ -137,6 +151,8 @@ export class OtpService {
     );
 
     this.logger.log(`OTP issued for ${phone} (${purpose})`);
+
+    return devEchoEnabled() ? { devCode: code } : {};
   }
 
   /** Verifies with attempt cap and per-(phone,IP) exponential backoff. */

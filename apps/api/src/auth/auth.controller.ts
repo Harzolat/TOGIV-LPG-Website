@@ -83,8 +83,9 @@ export class AuthController {
       throw e;
     }
 
+    let devCode: string | undefined;
     try {
-      await this.otp.issue(phone, parsed.data.purpose, req.ip);
+      ({ devCode } = await this.otp.issue(phone, parsed.data.purpose, req.ip));
     } catch (e) {
       if (e instanceof OtpThrottledError) {
         res.setHeader("Retry-After", Math.ceil(e.retryAfterMs / 1000));
@@ -94,7 +95,12 @@ export class AuthController {
     }
 
     // Never reveal whether the number has an account (enumeration resistance)
-    return { ok: true, csrfToken, message: "If eligible, a code has been sent." };
+    return {
+      ok: true,
+      csrfToken,
+      message: "If eligible, a code has been sent.",
+      ...(devCode ? { devCode } : {}),
+    };
   }
 
   @Post("otp/verify")
