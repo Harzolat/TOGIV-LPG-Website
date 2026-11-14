@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
+import { TOKEN_PEPPER } from "../env";
 
 /**
  * Secret-at-rest encryption (v1.2 §12 / §12.5): AES-256-GCM with a key
@@ -8,7 +9,7 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
  * Format: base64(iv | authTag | ciphertext) — self-describing, 12+16 prefix.
  */
 
-const KEY = scryptSync(process.env.TOKEN_PEPPER ?? "dev-pepper-change-in-production", "togi-totp-v1", 32);
+const KEY = scryptSync(TOKEN_PEPPER, "togi-totp-v1", 32);
 
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(12);

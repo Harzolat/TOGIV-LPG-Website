@@ -10,6 +10,12 @@ export default defineConfig({
     path: path.join(__dirname, "prisma", "migrations"),
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "postgresql://user:password@localhost:5432/togiv_lpg?schema=public",
+    // Prisma CLI/migrations must use Neon's direct (unpooled) endpoint:
+    // PgBouncer transaction mode is unsuitable for schema migrations.
+    // The NestJS runtime keeps using the pooled DATABASE_URL (app.module.ts).
+    url:
+      process.env.DATABASE_URL_UNPOOLED ??
+      process.env.DATABASE_URL ??
+      "postgresql://user:password@localhost:5432/togiv_lpg?schema=public",
   },
 });

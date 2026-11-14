@@ -1,19 +1,23 @@
+import "./env";
+import { RequestMethod } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import cookieParser from "cookie-parser";
-import dotenv from "dotenv";
 import { AppModule } from "./app.module";
 import { browserSecurityMiddleware } from "./common/http";
 import { securityHeaders } from "./common/security-headers";
-
-dotenv.config(); // local dev: apps/api/.env (production injects env directly)
+import { healthNoStore } from "./health/health.middleware";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.setGlobalPrefix("api/v1");
+  app.enableShutdownHooks();
+  app.setGlobalPrefix("api/v1", {
+    exclude: [{ path: "health", method: RequestMethod.GET }],
+  });
 
   // Order matters: cookies first (middleware + guards read them), then
   // Origin/CSRF checks, before any route handler (v1.2 §12.4).
   app.use(securityHeaders);
+  app.use("/health", healthNoStore);
   app.use(cookieParser());
   app.use(browserSecurityMiddleware);
 

@@ -9,6 +9,7 @@ import { Reflector } from "@nestjs/core";
 import { PrismaClient, User } from "@prisma/client";
 import { SessionService, SessionAudience } from "./session.service";
 import { sessionCookieName } from "./cookie-names";
+import { PUBLIC_KEY } from "./public.decorator";
 
 /**
  * RBAC + resource-scoped authorization — v1.2 §1.3 (approved matrix).
@@ -45,6 +46,12 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean | undefined>(
+      PUBLIC_KEY,
+      [ctx.getHandler(), ctx.getClass()],
+    );
+    if (isPublic) return true;
+
     const permission = this.reflector.getAllAndOverride<string | undefined>(
       PERMISSION_KEY,
       [ctx.getHandler(), ctx.getClass()],

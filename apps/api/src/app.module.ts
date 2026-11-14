@@ -1,4 +1,9 @@
-import { Module, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import {
+  Inject,
+  Module,
+  OnModuleDestroy,
+  OnModuleInit,
+} from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -14,7 +19,13 @@ import { ClaimService } from "./claims/claim.service";
 import { ClaimsController } from "./claims/claim.controller";
 import { CustomersController } from "./customers/customers.controller";
 import { CylindersController } from "./cylinders/cylinders.controller";
+import { getDatabaseUrl } from "./database/database-url";
 import { DeliveryService } from "./deliveries/delivery.service";
+import { HealthController } from "./health/health.controller";
+import {
+  createHealthPrismaClient,
+  HEALTH_PRISMA,
+} from "./health/health.database";
 import { OutboxWorker } from "./notifications/outbox.worker";
 import { QrController } from "./qr/qr.controller";
 import { QrService } from "./qr/qr.service";
@@ -23,8 +34,9 @@ import { RequestsController } from "./requests/requests.controller";
 
 /**
  * App wiring — Phase 1A modules.
- * AuthGuard runs globally: public routes pass through (with optional
- * session resolution), metadata routes enforce audience + permission.
+ * AuthGuard runs globally: explicitly @Public routes bypass it, other
+ * unannotated routes retain optional session resolution, and metadata routes
+ * enforce audience + permission.
  */
 
 const prismaProvider = {
@@ -32,10 +44,14 @@ const prismaProvider = {
   useFactory: () =>
     new PrismaClient({
       adapter: new PrismaPg({
-        connectionString:
-          process.env.DATABASE_URL ?? "postgresql://user:password@localhost:5432/togiv_lpg?schema=public",
+        connectionString: getDatabaseUrl(),
       }),
     }),
+};
+
+const healthPrismaProvider = {
+  provide: HEALTH_PRISMA,
+  useFactory: createHealthPrismaClient,
 };
 
 @Module({
@@ -44,6 +60,7 @@ const prismaProvider = {
     AuthController,
     CustomerCredentialsController,
     StaffAuthController,
+    HealthController,
     AdminController,
     AdminStaffController,
     QrController,
@@ -54,6 +71,7 @@ const prismaProvider = {
   ],
   providers: [
     prismaProvider,
+    healthPrismaProvider,
     { provide: APP_GUARD, useClass: AuthGuard },
     SessionService,
     LoginThrottle,
@@ -69,6 +87,7 @@ const prismaProvider = {
 export class AppModule implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaClient,
+    @Inject(HEALTH_PRISMA) private readonly healthPrisma: PrismaClient,
     private readonly outbox: OutboxWorker,
   ) {}
 
@@ -78,6 +97,9 @@ export class AppModule implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy() {
     this.outbox.stop();
-    await this.prisma.$disconnect();
+    await Promise.all([
+      this.prisma.$disconnect(),
+      this.healthPrisma.$disconnect(),
+    ]);
   }
 }

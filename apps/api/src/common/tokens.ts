@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { TOKEN_PEPPER } from "../env";
 
 /**
  * Opaque token + hashing utilities (v1.2 §12 / §1.4.3 / v1.2.1 A3).
@@ -10,7 +11,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
  *   strictly stronger here (revocation, single-use, analytics) — v1.2.1 A3.
  */
 
-const PEPPER = process.env.TOKEN_PEPPER ?? "dev-pepper-change-in-production";
+const PEPPER = TOKEN_PEPPER;
 
 export function generateOpaqueToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url"); // 32 bytes = 256-bit
