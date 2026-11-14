@@ -1,0 +1,341 @@
+{
+  "document": {
+    "title": "Throne of Grace Integrated Ventures — Customer Web Page Overview",
+    "purpose": "A complete, shareable description of the customer-facing web app: what it is, how it works, what it contains, and how people use it.",
+    "generatedFor": "Sharing with someone to understand the customer page in full",
+    "scope": "Customer web app (apps/web) as implemented in the current codebase",
+    "note": "This reflects the current operating plan: customers place refill orders and the team refills the cylinder on-site (at the customer's location) or at the station. No cylinder is dispatched to the customer."
+  },
+  "product": {
+    "name": "Throne of Grace Integrated Ventures — LPG Customer Service",
+    "audience": "LPG customers (guests and signed-in account holders)",
+    "goal": "Let customers request a cylinder refill, track progress, and manage their refill requests in one place, with clear status and payment information.",
+    "serviceModel": {
+      "summary": "Refill-order focused. The business receives a refill order, then refills the customer's cylinder either on-site at the customer's location or when the customer brings it to the station.",
+      "options": [
+        {
+          "id": "home",
+          "label": "On-site refill (we come to you)",
+          "description": "The team comes to the customer's location and fills the cylinder there.",
+          "locationRequired": true,
+          "dispatchNote": "No cylinder is dispatched to the customer."
+        },
+        {
+          "id": "station",
+          "label": "Station refill (bring it to us)",
+          "description": "The customer brings the cylinder to the station for refilling.",
+          "locationRequired": false
+        }
+      ],
+      "paymentPolicy": "Payment is confirmed before a refill is marked complete. Customers can see payment status (unpaid, pending confirmation, paid, waived) and method/amount when recorded.",
+      "statusNote": "For an on-site refill, the 'Dispatched' stage is presented to the customer as the team being en route to their location."
+    }
+  },
+  "technology": {
+    "type": "Single-page application (SPA)",
+    "stack": ["React", "TypeScript", "Vite", "React Router", "Tailwind/CSS tokens", "GSAP (home hero animation)", "lucide-react icons"],
+    "uiLibrary": "Shared internal UI components (@togi/ui): Button, Card, TextInput, TextArea, Select, StatusPill, Modal, Skeleton, EmptyState, ErrorState, Toasts",
+    "sharedDomain": "@togi/shared (types and transition rules consumed from source)",
+    "devServer": {
+      "port": 5175,
+      "apiProxy": "Same-origin /api proxied to the API at http://localhost:3000"
+    },
+    "buildOutput": "Static production build (Vite), with lazy-loaded route pages",
+    "accessibilityAndMotion": "Skip-to-content link, labeled form fields, focus/keyboard-friendly controls, and reduced-motion-safe behavior (global motion guards and reveal fallbacks)."
+  },
+  "authenticationAndAccess": {
+    "method": "Phone-based one-time passcode (OTP), no password for customers",
+    "audience": "Customer audience (separate from admin/staff). Audience-bound session cookies; staff sessions are not accepted on customer routes.",
+    "clientSecurity": {
+      "credentials": "Requests include credentials (cookies)",
+      "csrf": "Double-submit CSRF: readable CSRF cookie echoed as x-csrf-token on mutations; client can refresh via /auth/csrf and replay on CSRF expiry",
+      "headers": "Sends x-togi-audience: customer"
+    },
+    "modes": [
+      {
+        "route": "/login",
+        "title": "Sign in",
+        "copy": "Text a code to the phone number. No passwords to remember.",
+        "flow": [
+          "Enter phone number",
+          "POST /auth/otp/request (purpose: login) to send/issue a code",
+          "Enter 6-digit code",
+          "POST /auth/otp/verify (purpose: login, CSRF token) to create session",
+          "Refresh session and redirect (default /account or previously intended page)"
+        ]
+      },
+      {
+        "route": "/register",
+        "title": "Create your account",
+        "copy": "One number, one account — your requests, cylinders and claims together.",
+        "flow": [
+          "Enter full name and phone number",
+          "POST /auth/otp/request (purpose: register)",
+          "Enter 6-digit code",
+          "POST /auth/otp/verify (purpose: register, fullName, CSRF token)",
+          "Session created and redirected"
+        ]
+      }
+    ],
+    "sessionBootstrap": "GET /auth/me on load to resolve the current user (id, phone, kind); logout via POST /auth/logout.",
+    "identityRule": "One credential (phone) per account; existing numbers are directed to sign in rather than creating duplicates.",
+    "devNote": "In non-production with dev OTP echo enabled, the issued code may be shown in the UI so testing works without real SMS.",
+    "protectedRoutes": ["/account", "/account/requests/:id"],
+    "guestAccess": "Guests can submit a refill request and track it via a private tracking link/token without creating an account."
+  },
+  "globalLayout": {
+    "header": {
+      "wordmark": "THRONE OF GRACE / Integrated Ventures (links to home)",
+      "primaryNavDesktop": ["Home (/)", "Request (/request)", "Track (/track)", "Safety (/safety)"],
+      "primaryNavMobile": "Same four links in a secondary bar",
+      "activeState": "Brand-colored text with an underline indicator",
+      "rightSideAnonymous": ["Login button", "Register button"],
+      "rightSideSignedIn": ["My requests (/account)", "Sign out"],
+      "style": "Sticky, translucent backdrop header with brand rule accent"
+    },
+    "footer": {
+      "about": "Throne of Grace Integrated Ventures — LPG customer service & operations. Refill requests and support tracked from submission to completion.",
+      "emergencyNotice": "If you smell gas, move to open air, avoid switches and flames, and call your emergency line. Published emergency numbers are added from verified business settings before launch.",
+      "policyLinks": [
+        { "label": "Privacy & data protection", "to": "/privacy" },
+        { "label": "Safety information", "to": "/safety" },
+        { "label": "Terms of service", "to": "/terms" }
+      ],
+      "copyright": "© {year} Throne of Grace Integrated Ventures. All rights reserved."
+    },
+    "pageBehavior": "Route changes use a short page entrance transition (reduced-motion safe). Lazy-loaded pages show a loading spinner fallback."
+  },
+  "routesAndPages": [
+    {
+      "path": "/",
+      "name": "Home (landing)",
+      "purpose": "Introduce the service and drive users to place a refill request or track an existing one.",
+      "sections": [
+        {
+          "name": "Hero",
+          "content": {
+            "badge": "Reliable LPG, Always",
+            "headline": "Safe. Fast. Convenient. LPG Delivery",
+            "subheading": "Request your LPG refill, report an issue or make an enquiry with ease — anytime, anywhere.",
+            "primaryCta": { "label": "Request Delivery", "to": "/request" },
+            "secondaryCta": { "label": "Track Your Request", "to": "/track" },
+            "visual": "Background hero photograph of an LPG delivery truck/cylinders with a readability scrim (no mockup imagery)."
+          }
+        },
+        {
+          "name": "Service highlights",
+          "items": [
+            "Safe & Certified Products",
+            "Fast Delivery (Home or Station)",
+            "24/7 Support (Always Here)",
+            "Trusted Service (You Can Count On)"
+          ]
+        },
+        {
+          "name": "How it works",
+          "intro": "Get your LPG in 3 simple steps — Request, relax and let us take care of the rest.",
+          "steps": [
+            { "step": 1, "title": "Scan QR Code", "body": "Scan the QR code on your cylinder or location." },
+            { "step": 2, "title": "Make a Request", "body": "Request a refill, report a problem or make an enquiry." },
+            { "step": 3, "title": "Track & Relax", "body": "Track your request and get updates in real-time." }
+          ],
+          "link": { "label": "Learn More", "to": "/request" }
+        }
+      ],
+      "animation": "Coordinated hero entrance and scroll-reveal for sections (skipped when prefers-reduced-motion is set)."
+    },
+    {
+      "path": "/request",
+      "name": "Order a cylinder refill (New request)",
+      "purpose": "Collect and submit a refill order — the primary customer action in the current plan.",
+      "introCopy": "Send refill details. The team comes to your location to fill your cylinder on site (or you can bring it to the station) — no cylinder is dispatched to you.",
+      "form": {
+        "fields": [
+          { "name": "phone", "label": "Your phone number", "required": true, "validation": "Valid Nigerian number format", "purpose": "Contact/confirm and update the refill order" },
+          { "name": "capacity", "label": "Cylinder size", "type": "select", "optionsKg": [3, 6, 12.5, 25, 50], "default": 12.5 },
+          { "name": "quantity", "label": "Quantity (cylinders)", "type": "number", "min": 1, "max": 50, "default": 1 },
+          {
+            "name": "refillOption",
+            "label": "Refill option",
+            "type": "choice",
+            "required": true,
+            "options": [
+              { "value": "home", "mapsToApi": "deliveryMethod=home", "label": "On-site refill (we come to you)", "description": "Team comes to your location and fills your cylinder there." },
+              { "value": "station", "mapsToApi": "deliveryMethod=station", "label": "Station refill (bring it to us)", "description": "Bring your cylinder to the station for refilling." }
+            ],
+            "default": "home"
+          },
+          {
+            "name": "address",
+            "label": "Refill location",
+            "shownWhen": "refillOption == home",
+            "requiredWhen": "refillOption == home",
+            "fields": [
+              { "name": "line1", "label": "Street address / location", "required": true },
+              { "name": "line2", "label": "Landmark / area (optional)", "required": false },
+              { "name": "city", "label": "City / town", "required": true },
+              { "name": "state", "label": "State", "required": true },
+              { "name": "lga", "label": "LGA", "required": true },
+              { "name": "deliveryNote", "label": "Access notes (optional)", "hint": "Landmarks, gate details, best time to reach you, or where the cylinder is kept." }
+            ]
+          },
+          { "name": "notes", "label": "Extra notes (optional)", "hint": "Anything else (e.g. preferred time, cylinder condition)." }
+        ],
+        "footerNote": "Payment is confirmed before the refill is completed.",
+        "submitAction": "POST /requests (type: refill, contactPhone, deliveryMethod, payload {capacityKg, quantity, notes?}, address for home)"
+      },
+      "successState": {
+        "title": "Refill request received",
+        "shows": ["Reference number", "Save-reference reminder", "Context message based on option (team comes on-site vs bring to station)"],
+        "guest": "Displays a private tracking link (and message) when provided",
+        "signedIn": "Request saved to the account; can go to My requests",
+        "actions": ["Submit another (/request)", "View my requests (/account) or Done (/)"]
+      },
+      "errors": "Inline/alerted validation and submission errors (e.g. missing location for on-site refill, invalid phone)."
+    },
+    {
+      "path": "/track",
+      "name": "Track a request (entry)",
+      "purpose": "Let anyone with a private tracking link/token view minimal request progress.",
+      "content": {
+        "description": "Paste the tracking link received on submission. Signed-in customers can find everything under My requests.",
+        "input": "Accepts a full /track/<token> link or a bare token",
+        "submit": "Navigates/loads tracking for the token",
+        "emptyState": "Prompts to submit a request to receive a reference and private tracking link"
+      }
+    },
+    {
+      "path": "/track/:token",
+      "name": "Track a request (token view)",
+      "purpose": "Show live, minimal-PII status for a specific guest tracking token.",
+      "dataSource": "GET /requests/track/:token (polled ~10s, on focus/visibility; silent refresh keeps last good snapshot on hiccups)",
+      "displays": {
+        "header": ["Request type", "Reference", "Current status pill"],
+        "timeline": "Type-specific progress steps derived from status (refill path shown; terminal rejected/cancelled states explained; escalated noted)",
+        "lastUpdated": "Timestamp of last update",
+        "cta": "Prompt to create an account to keep all requests in one place"
+      },
+      "privacy": "Payload is intentionally minimal (no name, phone, address, or internal notes).",
+      "errorState": "Invalid/expired/revoked link messaging with option to try a different link."
+    },
+    {
+      "path": "/login",
+      "name": "Sign in",
+      "purpose": "Authenticate returning customers via OTP.",
+      "access": "Public; redirects to account/intended destination if already signed in."
+    },
+    {
+      "path": "/register",
+      "name": "Register",
+      "purpose": "Create a customer account via OTP (name + phone).",
+      "access": "Public; redirects if already signed in."
+    },
+    {
+      "path": "/account",
+      "name": "My requests (dashboard)",
+      "purpose": "Signed-in home for a customer to view and access all their refill requests.",
+      "access": "Protected (requires authenticated customer session).",
+      "dataSource": "GET /requests/mine (polled ~12s)",
+      "displays": [
+        "Signed-in phone identity",
+        "New request CTA",
+        "List of requests (reference, type, on-site/station label, created date, status pill) linking to detail"
+      ],
+      "guestHistoryLinking": {
+        "description": "If the account has no requests yet, the app checks for guest requests made with the same phone number.",
+        "behavior": "Candidates are NEVER auto-linked. The customer must explicitly select and confirm which requests are theirs.",
+        "endpoints": ["POST /requests/link/candidates", "POST /requests/link/confirm (requestIds)"],
+        "ui": "Card listing candidate requests with checkboxes, Link selected, or Not now."
+      },
+      "states": ["Loading skeletons", "Error with retry", "Empty state prompting first refill request", "Populated list"]
+    },
+    {
+      "path": "/account/requests/:id",
+      "name": "Request detail (owner view)",
+      "purpose": "Full, customer-visible view of a single refill request and its progress.",
+      "access": "Protected (owner).",
+      "dataSource": "GET /requests/:id (polled ~12s)",
+      "displays": {
+        "summary": ["Reference", "Type (Refill) and refill option (on-site/station)", "Submission time", "Current status (contextual label, e.g. Team en route for on-site dispatched)", "Contact phone when present"],
+        "cancellation": "Customer can cancel before the team accepts the request (allowed in pre-acceptance statuses), with optional reason, via POST /requests/:id/cancel.",
+        "refillAndPayment": "Refill option explanation and payment summary (status, method, amount when available) with note that payment is confirmed before completion and that on-site means the team fills at location (no cylinder dispatched).",
+        "progress": "Timeline from customer-visible status history (from → to, notes, timestamps).",
+        "serviceAttempts": "Recorded service/visit attempts (attempt number, window/schedule, failure reason, status) when present.",
+        "messages": "Non-internal messages visible to the customer when present."
+      },
+      "notes": "Internal/staff-only information is not shown; server filters visibility."
+    },
+    {
+      "path": "/privacy",
+      "name": "Privacy & data protection",
+      "purpose": "Explain data collection, use, non-sale, retention (draft), and NDPR/NDPA rights.",
+      "status": "Draft — pending professional (data protection/legal) review, shown with a visible review banner."
+    },
+    {
+      "path": "/safety",
+      "name": "LPG safety information",
+      "purpose": "Provide general gas safety guidance (smell-gas steps, cylinder basics, delivery checks).",
+      "status": "Draft — pending qualified safety professional review, shown with a visible review banner. Emergency numbers to be published from verified settings before launch."
+    },
+    {
+      "path": "/terms",
+      "name": "Terms of service",
+      "purpose": "Outline terms for using the platform (requests/confirmation/pricing, account responsibility, fair use, claims).",
+      "status": "Draft — pending legal review, shown with a visible review banner."
+    },
+    {
+      "path": "*",
+      "name": "Not found",
+      "purpose": "Friendly 404 with a link back home."
+    }
+  ],
+  "dataAndLiveUpdates": {
+    "polling": "Key views auto-refresh (smart polling) and refresh on tab focus/visibility regain without manual reload; loaders stay silent when data exists to avoid flashing.",
+    "intervals": {
+      "trackToken": "~10 seconds",
+      "myRequestsAndRequestDetail": "~12 seconds"
+    },
+    "requestTypesSupportedByDomain": ["refill", "complaint", "enquiry"],
+    "customerFacingRequestFocus": "The current UI is focused on submitting and managing refill requests; complaint/enquiry submission is not exposed in the customer request form in this plan.",
+    "statuses": {
+      "values": ["Submitted", "Received", "UnderReview", "Accepted", "Processing", "Dispatched", "Completed", "Resolved", "Rejected", "Cancelled", "Escalated"],
+      "customerContext": "For on-site refills, Dispatched is communicated as the team being en route. Timelines and allowed actions (e.g. pre-acceptance cancellation) are status-aware."
+    },
+    "payment": {
+      "fieldsVisible": ["paymentStatus", "paymentMethod", "paymentAmountKobo (displayed as currency)"],
+      "statuses": ["unpaid", "pending", "paid", "waived"],
+      "rule": "Payment is confirmed before refill completion."
+    }
+  },
+  "apiEndpointsUsedByCustomerApp": [
+    { "method": "POST", "path": "/auth/otp/request", "use": "Request OTP for login/register" },
+    { "method": "POST", "path": "/auth/otp/verify", "use": "Verify OTP and establish session" },
+    { "method": "GET", "path": "/auth/me", "use": "Resolve current customer session" },
+    { "method": "POST", "path": "/auth/logout", "use": "Sign out" },
+    { "method": "GET", "path": "/auth/csrf", "use": "Refresh CSRF token/pair when needed" },
+    { "method": "POST", "path": "/requests", "use": "Submit a refill request (guest or signed-in)" },
+    { "method": "GET", "path": "/requests/track/:token", "use": "Public/minimal tracking by token" },
+    { "method": "GET", "path": "/requests/mine", "use": "List signed-in customer's requests" },
+    { "method": "GET", "path": "/requests/:id", "use": "Request detail (owner)" },
+    { "method": "POST", "path": "/requests/:id/cancel", "use": "Customer cancellation (when allowed)" },
+    { "method": "POST", "path": "/requests/link/candidates", "use": "Find guest requests eligible for linking" },
+    { "method": "POST", "path": "/requests/link/confirm", "use": "Confirm and link selected guest requests" }
+  ],
+  "designAndBranding": {
+    "palette": "Brand blue and red on dark/navy-toned surfaces (shared tokens)",
+    "tone": "Clear, trustworthy, service-oriented; concise copy focused on the refill action and status",
+    "components": "Cards, status pills, skeletons, empty/error states, toasts, and form controls for consistent, legible UI",
+    "imagery": "Supplied LPG delivery-truck hero photo (no mockup imagery)",
+    "responsiveness": "Mobile and desktop layouts (collapsing nav, responsive grids/forms)"
+  },
+  "knownConstraintsAndDeferred": {
+    "outOfScopeOrDeferred": [
+      "Real SMS delivery (dev OTP echo only in non-production)",
+      "Online payment gateway/checkout (payment recorded/confirmed by staff; manual/offline in this phase)",
+      "Customer-facing cylinder scan/registration UI not exposed in this focused refill flow (backend claim/QR mechanisms exist)",
+      "Production launch inputs pending: final brand assets, SMS provider, approved price list/zones/emergency numbers, professional policy reviews"
+    ],
+    "trackingPrivacy": "Guest tracking exposes only minimal, non-sensitive request information via private tokens."
+  },
+  "summaryForSharing": "The customer page is a refill-order web app for Throne of Grace Integrated Ventures. Visitors can land on a branded home page, place an on-site or station cylinder refill order (with location for on-site), and track it via a private link. Customers can sign in/register with a phone OTP to see 'My requests', view live status/payment/refill details, cancel before acceptance, and explicitly link past guest requests. The experience is mobile-friendly, live-updating, and aligned to the current plan: the team refills the customer's cylinder on-site or at the station (no cylinder dispatched), with payment confirmed before completion. Policy pages are present as drafts pending professional review."
+}

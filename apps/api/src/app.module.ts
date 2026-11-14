@@ -2,15 +2,18 @@ import { Module, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { AdminController } from "./admin/admin.controller";
+import { AdminStaffController } from "./admin/staff.controller";
 import { AuthController } from "./auth/auth.controller";
 import { AuthGuard } from "./auth/auth.guard";
-import { DevSmsAdapter, OtpService, SmsProvider } from "./auth/otp.service";
+import { CustomerCredentialsController } from "./auth/customer-credentials.controller";
 import { LoginThrottle } from "./auth/login-throttle";
 import { SessionService } from "./auth/session.service";
 import { StaffAuthController } from "./auth/staff.controller";
 import { ClaimService } from "./claims/claim.service";
 import { ClaimsController } from "./claims/claim.controller";
 import { CustomersController } from "./customers/customers.controller";
+import { CylindersController } from "./cylinders/cylinders.controller";
 import { DeliveryService } from "./deliveries/delivery.service";
 import { OutboxWorker } from "./notifications/outbox.worker";
 import { QrController } from "./qr/qr.controller";
@@ -24,7 +27,6 @@ import { RequestsController } from "./requests/requests.controller";
  * session resolution), metadata routes enforce audience + permission.
  */
 
-// Prisma 7 requires an explicit driver adapter (no implicit connection).
 const prismaProvider = {
   provide: PrismaClient,
   useFactory: () =>
@@ -36,23 +38,23 @@ const prismaProvider = {
     }),
 };
 
-const smsProvider: SmsProvider = new DevSmsAdapter(); // launch: swap via env
-
 @Module({
   imports: [],
   controllers: [
     AuthController,
+    CustomerCredentialsController,
     StaffAuthController,
+    AdminController,
+    AdminStaffController,
     QrController,
     RequestsController,
     ClaimsController,
+    CylindersController,
     CustomersController,
   ],
   providers: [
     prismaProvider,
-    { provide: SmsProvider, useValue: smsProvider },
     { provide: APP_GUARD, useClass: AuthGuard },
-    OtpService,
     SessionService,
     LoginThrottle,
     AuthGuard,

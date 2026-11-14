@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Query } from "@nestjs/common";
+import { Controller, Delete, Get, NotFoundException, Param, Query } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { RequireAudience, RequirePermission } from "../auth/auth.guard";
 
@@ -142,5 +142,31 @@ export class CustomersController {
         state: c.state?.currentState ?? "pending",
       })),
     };
+  }
+
+  @Delete(":id")
+  @RequireAudience("admin")
+  @RequirePermission("customer:suspend")
+  async remove(@Param("id") id: string) {
+    const customer = await this.prisma.customerProfile.findUnique({
+      where: { id },
+      select: { id: true, userId: true, user: { select: { deletedAt: true } } },
+    });
+    if (!customer || customer.user.deletedAt) {
+      throw new NotFoundException("Customer not found.");
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: customer.userId },
+        data: { deletedAt: new Date(), status: "deleted" },
+      });
+      await tx.session.updateMany({
+        where: { userId: customer.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return { ok: true };
   }
 }

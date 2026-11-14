@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { Button, Card, EmptyState, ErrorState, Skeleton } from "@togi/ui";
+import { usePolling } from "../lib/usePolling";
+import { Button, Card, EmptyState, ErrorState, Skeleton, useToast } from "@togi/ui";
 import type { CustomerProfile } from "@togi/shared";
 
 /**
- * Customers — staff directory. Mirrors the queue/claims list pattern
- * (filter → list → detail) using the CustomerProfile shape from the
- * shared types, so the console shows only what the staff role is
- * permitted to read.
+ * Customers — staff directory with basic management actions.
  */
 const FILTER_KEYS = ["all", "active"] as const;
 type FilterKey = (typeof FILTER_KEYS)[number];
@@ -18,27 +16,41 @@ function formatDate(iso: string): string {
 }
 
 export default function Customers() {
+  const { toast } = useToast();
   const [items, setItems] = useState<CustomerProfile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("all");
-  const [busy, setBusy] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
-    setBusy(true);
     try {
       const res = await api<{ customers: CustomerProfile[] }>("/customers");
       setItems(res.customers);
+      setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not load the customer directory.");
-    } finally {
-      setBusy(false);
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  usePolling(load, { intervalMs: 15_000 });
+
+  async function removeCustomer(c: CustomerProfile) {
+    const ok = window.confirm(`Delete customer ${c.fullName ?? c.phone}? This will revoke their access.`);
+    if (!ok) return;
+    setDeletingId(c.id);
+    try {
+      await api(`/customers/${c.id}`, { method: "DELETE" });
+      toast({ message: "Customer deleted.", tone: "success" });
+      await load();
+    } catch (err) {
+      toast({
+        message: err instanceof ApiError ? err.message : "Could not delete customer.",
+        tone: "error",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -46,7 +58,7 @@ export default function Customers() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Customers</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            Customer directory — name, phone, profile state.
+            Customer records, contact details, and order history for quick reference.
           </p>
         </div>
       </div>
@@ -70,7 +82,7 @@ export default function Customers() {
         ))}
       </div>
 
-      {error ? (
+      {error && items === null ? (
         <ErrorState
           title="Couldn't load the directory"
           description={error}
@@ -80,7 +92,7 @@ export default function Customers() {
             </Button>
           }
         />
-      ) : busy ? (
+      ) : items === null ? (
         <div className="mt-6 space-y-3">
           {[0, 1, 2].map((i) => (
             <Skeleton key={i} height="4.5rem" />
@@ -101,21 +113,29 @@ export default function Customers() {
           <Card padded title="Customer directory">
             <ul className="divide-y divide-[var(--border)]">
               {items?.map((c) => (
-                <li key={c.id}>
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                   <Link
                     to={`/customers/${c.id}`}
-                    className="flex items-center justify-between gap-4 p-3 transition-colors hover:bg-[var(--surface)]"
+                    className="min-w-0 flex-1 transition-colors hover:opacity-80"
                   >
-                    <span className="min-w-0">
-                      <span className="block font-mono text-sm font-semibold">{c.fullName ?? c.phone}</span>
-                      <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-                        {c.phone} · {formatDate(c.createdAt)}
-                      </span>
+                    <span className="block font-mono text-sm font-semibold">{c.fullName ?? c.phone}</span>
+                    <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
+                      {c.phone} · {formatDate(c.createdAt)}
                     </span>
+                  </Link>
+                  <div className="flex items-center gap-2">
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {c.state ?? "—"}
                     </span>
-                  </Link>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={deletingId === c.id}
+                      onClick={() => void removeCustomer(c)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

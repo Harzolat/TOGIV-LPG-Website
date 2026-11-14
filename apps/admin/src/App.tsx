@@ -5,12 +5,13 @@ import Layout from "./components/Layout";
 import { AuthProvider, useAuth } from "./lib/auth";
 
 const Login = lazy(() => import("./pages/Login"));
+const Overview = lazy(() => import("./pages/Overview"));
 const Queue = lazy(() => import("./pages/Queue"));
 const RequestDetail = lazy(() => import("./pages/RequestDetail"));
-const Claims = lazy(() => import("./pages/Claims"));
-const ClaimDetail = lazy(() => import("./pages/ClaimDetail"));
 const Customers = lazy(() => import("./pages/Customers"));
 const CustomerDetail = lazy(() => import("./pages/CustomerDetail"));
+const Team = lazy(() => import("./pages/Team"));
+const AddAdmin = lazy(() => import("./pages/AddAdmin"));
 const Settings = lazy(() => import("./pages/Settings"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -53,13 +54,14 @@ export default function App() {
                 </Protected>
               }
             >
-              <Route index element={<Navigate to="/queue" replace />} />
+              <Route index element={<Navigate to="/overview" replace />} />
+              <Route path="overview" element={page(<Overview />)} />
               <Route path="queue" element={page(<Queue />)} />
               <Route path="requests/:id" element={page(<RequestDetail />)} />
-              <Route path="claims" element={page(<Claims />)} />
-              <Route path="claims/:id" element={page(<ClaimDetail />)} />
               <Route path="customers" element={page(<Customers />)} />
               <Route path="customers/:id" element={page(<CustomerDetail />)} />
+              <Route path="team" element={page(<Team />)} />
+              <Route path="add-admin" element={page(<AddAdmin />)} />
               <Route path="settings" element={page(<Settings />)} />
               <Route path="*" element={page(<NotFound />)} />
             </Route>

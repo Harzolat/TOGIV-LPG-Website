@@ -3,67 +3,50 @@ import { Link } from "react-router-dom";
 import gsap from "gsap";
 import {
   ArrowRight,
-  Check,
   ClipboardList,
-  Handshake,
   Headset,
-  QrCode,
-  Search,
-  ShieldCheck,
+  MapPin,
+  Phone,
+  RefreshCw,
   Truck,
 } from "lucide-react";
 
 /**
- * Public landing — follows the approved mockup layout with the Throne of
- * Grace brand palette (blue + red, v1.2 §1.1):
- *  - hero: badge → two-tone headline → sub → pill CTAs, with the delivery
- *    photo bleeding off the right edge on large screens
- *  - floating highlight card (4 service promises) overlapping the hero
- *  - "How It Works": intro column + 3 numbered steps joined by connectors
- * Motion is purposeful and reduced-motion safe: a coordinated gsap hero
- * entrance, IntersectionObserver + CSS reveals for below-fold content.
- * The photo is the supplied LPG delivery-truck shot (no mockup imagery used).
+ * Public landing — mobile-first, clear and action-oriented.
+ * Messaging reflects the current service model:
+ * - On-site refill: team comes to the customer's location to refill the cylinder
+ * - Station refill: customer brings the cylinder to the station
+ * No cylinder is dispatched to the customer.
  */
 
-const FEATURES = [
-  { icon: ShieldCheck, title: "Safe & Certified", sub: "Products" },
-  { icon: Truck, title: "Fast Delivery", sub: "Home or Station" },
-  { icon: Headset, title: "24/7 Support", sub: "Always Here" },
-  { icon: Handshake, title: "Trusted Service", sub: "You Can Count On" },
+const HIGHLIGHTS = [
+  { icon: MapPin, title: "Convenient On-site Refills", sub: "We come to your location" },
+  { icon: Truck, title: "Flexible Station Refills", sub: "Bring your cylinder to us" },
+  { icon: ClipboardList, title: "Clear Request Tracking", sub: "Follow progress in one place" },
+  { icon: Headset, title: "Customer Support", sub: "We help when you need it" },
 ] as const;
 
 const STEPS = [
   {
     n: "1",
-    icon: QrCode,
-    title: "Scan QR Code",
-    body: "Scan the QR code on your cylinder or location.",
+    icon: ClipboardList,
+    title: "Start a refill request",
+    body: "Enter your contact details and cylinder information.",
   },
   {
     n: "2",
-    icon: ClipboardList,
-    title: "Make a Request",
-    body: "Request a refill, report a problem or make an enquiry.",
+    icon: RefreshCw,
+    title: "Choose on-site or station refill",
+    body: "We refill at your location, or you bring the cylinder to our station.",
   },
   {
     n: "3",
-    icon: Check,
-    title: "Track & Relax",
-    body: "Track your request and get updates in real-time.",
+    icon: ClipboardList,
+    title: "Track request",
+    body: "Track your on-site refill progress in your account.",
   },
 ] as const;
 
-/** Responsive divider borders for the highlight card (1 / 2 / 4 columns). */
-function featureBorders(i: number): string {
-  if (i === 0) return "";
-  if (i === 1) return "border-t sm:border-t-0 sm:border-l";
-  if (i === 2) return "border-t sm:border-t lg:border-t-0 lg:border-l";
-  return "border-t sm:border-t sm:border-l lg:border-t-0 lg:border-l";
-}
-
-/** Reveal-on-scroll: CSS does the motion, the observer only flips a flag,
- *  so StrictMode re-runs and HMR can never strand content mid-animation.
- *  When `enabled` is false (reduced motion) content starts visible. */
 function useInView<T extends HTMLElement>(enabled: boolean) {
   const ref = useRef<T | null>(null);
   const [inView, setInView] = useState(!enabled);
@@ -93,23 +76,25 @@ export default function Home() {
   const [prefersReduced] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
-  const [featuresRef, featuresVisible] = useInView<HTMLDivElement>(!prefersReduced);
+  const [highlightsRef, highlightsVisible] = useInView<HTMLDivElement>(!prefersReduced);
   const [stepsRef, stepsVisible] = useInView<HTMLDivElement>(!prefersReduced);
 
-  // Hero entrance — one coordinated timeline, skipped under reduced motion
   useEffect(() => {
-    if (prefersReduced) return;
+    const heroTargets = "[data-hero-img],[data-hero-badge],[data-hero-line],[data-hero-sub],[data-hero-cta]";
+    if (prefersReduced) {
+      gsap.set(heroTargets, { clearProps: "opacity,visibility,transform" });
+      return;
+    }
 
     const ctx = gsap.context(() => {
+      gsap.set("[data-hero-cta],[data-hero-badge],[data-hero-line],[data-hero-sub]", { opacity: 1, visibility: "visible" });
       gsap
         .timeline({ defaults: { ease: "power3.out" } })
-        // Background photo settles from a slow zoom (Ken Burns), then copy cascades
-        .from("[data-hero-img]", { scale: 1.1, duration: 1.9, ease: "power2.out" }, 0)
-        .from("[data-hero-badge]", { y: 14, opacity: 0, duration: 0.5 }, 0.2)
-        .from("[data-hero-line]", { y: 30, opacity: 0, duration: 0.7, stagger: 0.1 }, 0.35)
-        .from("[data-hero-rule]", { scaleX: 0, duration: 0.8, ease: "power3.inOut" }, 0.8)
-        .from("[data-hero-sub]", { y: 16, opacity: 0, duration: 0.55 }, 0.9)
-        .from("[data-hero-cta]", { y: 12, opacity: 0, duration: 0.5, stagger: 0.08 }, 1.05);
+        .fromTo("[data-hero-img]", { scale: 1.08 }, { scale: 1, duration: 1.6, ease: "power2.out" }, 0)
+        .fromTo("[data-hero-badge]", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.45 }, 0.15)
+        .fromTo("[data-hero-line]", { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6, stagger: 0.08 }, 0.25)
+        .fromTo("[data-hero-sub]", { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5 }, 0.55)
+        .fromTo("[data-hero-cta]", { y: 10, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.45, stagger: 0.08 }, 0.7);
     }, scope);
 
     return () => ctx.revert();
@@ -117,10 +102,8 @@ export default function Home() {
 
   return (
     <div ref={scope}>
-      {/* Hero — delivery photo as the full-section background; copy sits
-          left over a scrim that keeps every line fully legible. */}
-      <section className="bleed-full relative -mt-10 overflow-hidden pb-28 pt-14 sm:pt-16 lg:pb-32 lg:pt-20">
-        {/* Background photography */}
+      {/* Hero */}
+      <section className="bleed-full relative -mt-8 overflow-hidden pb-14 pt-8 sm:-mt-10 sm:pb-20 sm:pt-14 lg:pb-24 lg:pt-16">
         <div className="absolute inset-0">
           <picture>
             <source
@@ -135,219 +118,157 @@ export default function Home() {
               sizes="100vw"
               width={1600}
               height={900}
-              alt="LPG delivery truck with its rear doors open, loaded with refilled cylinders in blue, red, yellow and grey, driving through the city"
+              alt="LPG cylinders ready for service"
               className="block h-full w-full object-cover"
               style={{ objectPosition: "62% center" }}
               decoding="async"
+              fetchPriority="high"
             />
           </picture>
         </div>
         <div className="hero-scrim absolute inset-0" aria-hidden="true" />
 
-        <div className="relative mx-auto w-full max-w-5xl px-5">
+        <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-5">
           <div className="max-w-2xl">
-            {/* Badge text uses --primary-hover (lighter blue): 5.2:1 on the
-                tinted pill at 12px, where --primary only reaches 4.05:1. */}
-            <p
-              data-hero-badge
-              className="mb-5 inline-flex items-center gap-2.5 rounded-full py-1.5 pl-1.5 pr-4 text-xs font-semibold"
-              style={{ background: "var(--primary-surface)", color: "var(--primary-hover)" }}
-            >
-              <span
-                className="grid h-5 w-5 place-items-center rounded-full"
-                style={{ background: "var(--primary)" }}
-                aria-hidden="true"
-              >
-                <Check size={12} strokeWidth={3} color="var(--primary-contrast)" />
-              </span>
-              Reliable LPG, Always
-            </p>
-
-            <h1 className="max-w-2xl text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-[2.75rem] lg:text-[2.3rem] xl:text-[2.8rem]">
+            <h1 className="max-w-xl text-3xl font-extrabold leading-[1.08] tracking-tight sm:text-4xl lg:text-5xl">
               <span data-hero-line className="block">
-                Safe. Fast. Convenient.
+                Safe, convenient LPG refills
               </span>
               <span data-hero-line className="block" style={{ color: "var(--primary)" }}>
-                LPG Delivery
+                made simple.
               </span>
             </h1>
 
-            <div
-              data-hero-rule
-              className="t-rule mt-6"
-              style={{ height: 3, maxWidth: "9rem" }}
-              aria-hidden="true"
-            />
-
             <p
               data-hero-sub
-              className="mt-5 max-w-lg text-base leading-relaxed sm:text-lg"
+              className="mt-4 max-w-lg text-base leading-relaxed sm:text-lg"
               style={{ color: "var(--text-muted)" }}
             >
-              Request your LPG refill, report an issue or make an enquiry with ease —
-              anytime, anywhere.
+              Request an on-site cylinder refill or bring your cylinder to our station.
+              Submit your request and follow its progress with ease.
             </p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            <div data-hero-sub className="mt-4 max-w-lg">
+              <p className="text-sm font-semibold sm:text-base" style={{ color: "var(--text)" }}>
+                Gas accessories
+              </p>
+              <p className="mt-1 text-sm leading-relaxed sm:text-base" style={{ color: "var(--text-muted)" }}>
+                We also sell high-grade gas accessories to keep your kitchen safe and efficient.
+              </p>
+            </div>
+
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <Link
                 data-hero-cta
                 to="/request"
-                className="t-btn t-btn--primary t-btn--lg"
-                style={{ borderRadius: "var(--radius-pill)" }}
+                className="t-btn t-btn--primary t-btn--lg w-full justify-center sm:w-auto"
+                style={{ borderRadius: "var(--radius-pill)", visibility: "visible" }}
               >
-                Request Delivery
+                Request a Refill
                 <ArrowRight size={17} aria-hidden="true" />
               </Link>
               <Link
                 data-hero-cta
-                to="/track"
-                className="t-btn t-btn--secondary t-btn--lg"
-                style={{ borderRadius: "var(--radius-pill)" }}
+                to="/safety"
+                className="t-btn t-btn--secondary t-btn--lg w-full justify-center sm:w-auto"
+                style={{ borderRadius: "var(--radius-pill)", visibility: "visible" }}
               >
-                Track Your Request
-                <Search size={16} aria-hidden="true" />
+                Contact us
+                <Phone size={16} aria-hidden="true" />
               </Link>
+            </div>
+
+            <div className="mt-8 sm:mt-10">
+              <div
+                ref={highlightsRef}
+                className="t-card rounded-2xl"
+                style={{ boxShadow: "var(--shadow-md)", background: "color-mix(in srgb, var(--surface-raised) 92%, transparent)" }}
+              >
+                <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+                  {HIGHLIGHTS.map((f, i) => {
+                    const Icon = f.icon;
+                    return (
+                      <li
+                        key={f.title}
+                        className={`flex items-center gap-3 px-4 py-4 t-reveal${highlightsVisible ? " is-visible" : ""}`}
+                        style={{
+                          "--reveal-delay": `${0.1 + i * 0.06}s`,
+                          borderColor: "var(--border)",
+                          borderTopWidth: i === 0 ? 0 : 1,
+                        } as CSSProperties}
+                      >
+                        <Icon
+                          size={24}
+                          strokeWidth={1.8}
+                          aria-hidden="true"
+                          style={{ color: "var(--primary)", flexShrink: 0 }}
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                            {f.title}
+                          </p>
+                          <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
+                            {f.sub}
+                          </p>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Highlight card — floats over the hero's lower edge */}
-      <section aria-label="Service highlights" className="relative z-10 -mt-16 lg:-mt-20">
-        <div
-          ref={featuresRef}
-          className="t-card rounded-2xl"
-          style={{ border: "none", borderRadius: "1rem", boxShadow: "var(--shadow-lg)" }}
-        >
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            {FEATURES.map((f, i) => {
-              const Icon = f.icon;
-              return (
-                <li
-                  key={f.title}
-                  className={`flex items-center gap-3.5 px-5 py-4 t-reveal${featuresVisible ? " is-visible" : ""} ${featureBorders(i)}`}
-                  style={
-                    {
-                      "--reveal-delay": `${0.2 + i * 0.08}s`,
-                      borderColor: "var(--border)",
-                    } as CSSProperties
-                  }
-                >
-                  <Icon
-                    size={26}
-                    strokeWidth={1.8}
-                    aria-hidden="true"
-                    style={{ color: "var(--primary)", flexShrink: 0 }}
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                      {f.title}
-                    </p>
-                    <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
-                      {f.sub}
-                    </p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </section>
-
-      {/* How It Works */}
-      <section className="py-14 sm:py-16" aria-labelledby="how-heading">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] lg:gap-14">
-          {/* Intro column */}
+      {/* How it works */}
+      <section className="py-12 sm:py-16" aria-labelledby="how-heading">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)] lg:gap-12">
           <div>
-            <div className="flex items-center gap-3">
-              <span
-                className="t-rule"
-                style={{ width: 28, height: 3 }}
-                aria-hidden="true"
-              />
-              <span className="text-sm font-semibold" style={{ color: "var(--primary)" }}>
-                How It Works
-              </span>
-            </div>
-            <h2
-              id="how-heading"
-              className="mt-4 text-3xl font-extrabold tracking-tight sm:text-4xl"
-            >
-              Get Your LPG
-              <br />
-              in 3 Simple Steps
+            <p className="text-sm font-semibold" style={{ color: "var(--primary)" }}>
+              How it works
+            </p>
+            <h2 id="how-heading" className="mt-2 text-2xl font-extrabold tracking-tight sm:text-3xl">
+              Get your cylinder refilled in 3 simple steps
             </h2>
-            <p
-              className="mt-4 max-w-sm text-base leading-relaxed"
-              style={{ color: "var(--text-muted)" }}
-            >
-              Request, relax and let us take care of the rest.
+            <p className="mt-3 max-w-md text-sm leading-relaxed sm:text-base" style={{ color: "var(--text-muted)" }}>
+              Place a refill request, choose how you want it handled, and track progress from submission to completion.
             </p>
             <Link
               to="/request"
-              className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold underline underline-offset-4 transition-opacity hover:opacity-75"
+              className="mt-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold underline underline-offset-4"
               style={{ color: "var(--primary)" }}
             >
-              Learn More
+              Start a refill request
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
           </div>
 
-          {/* Steps */}
-          <div ref={stepsRef} className="grid gap-8 sm:grid-cols-3 sm:gap-6 lg:gap-8">
+          <div ref={stepsRef} className="grid gap-6 sm:grid-cols-3 sm:gap-4">
             {STEPS.map((s, i) => {
               const Icon = s.icon;
-              const solid = i === STEPS.length - 1;
               return (
                 <div
                   key={s.n}
-                  className={`relative t-reveal${stepsVisible ? " is-visible" : ""}`}
-                  style={{ "--reveal-delay": `${i * 0.14}s` } as CSSProperties}
+                  className={`t-reveal${stepsVisible ? " is-visible" : ""}`}
+                  style={{ "--reveal-delay": `${i * 0.1}s` } as CSSProperties}
                 >
-                  <div className="flex w-16 justify-center">
+                  <div className="flex items-center gap-2">
                     <span
-                      className="grid h-8 w-8 place-items-center rounded-full text-xs font-bold"
+                      className="grid h-7 w-7 place-items-center rounded-full text-xs font-bold"
                       style={{ background: "var(--accent-surface)", color: "var(--accent)" }}
                     >
                       {s.n}
                     </span>
-                  </div>
-                  <div
-                    className="t-lift mt-3 grid h-16 w-16 place-items-center rounded-2xl"
-                    style={
-                      solid
-                        ? { background: "var(--primary)", color: "var(--primary-contrast)" }
-                        : { background: "var(--primary-surface)", color: "var(--primary)" }
-                    }
-                  >
-                    <Icon size={26} strokeWidth={solid ? 2.6 : 1.9} aria-hidden="true" />
-                  </div>
-
-                  {/* Connector to the next step (draws in when revealed) */}
-                  {i < STEPS.length - 1 && (
                     <span
-                      aria-hidden="true"
-                      className="hidden lg:block"
-                      style={{
-                        position: "absolute",
-                        top: 76,
-                        left: 64,
-                        right: -32,
-                        height: 1,
-                        background: "var(--border-strong)",
-                        transform: stepsVisible ? "scaleX(1)" : "scaleX(0)",
-                        transformOrigin: "left center",
-                        transition: "transform 0.6s var(--ease)",
-                        transitionDelay: `${0.4 + i * 0.14}s`,
-                      }}
-                    />
-                  )}
-
-                  <h3 className="mt-4 text-base font-semibold">{s.title}</h3>
-                  <p
-                    className="mt-1.5 text-sm leading-relaxed"
-                    style={{ color: "var(--text-muted)" }}
-                  >
+                      className="grid h-10 w-10 place-items-center rounded-xl"
+                      style={{ background: "var(--primary-surface)", color: "var(--primary)" }}
+                    >
+                      <Icon size={18} aria-hidden="true" />
+                    </span>
+                  </div>
+                  <h3 className="mt-3 text-base font-semibold">{s.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
                     {s.body}
                   </p>
                 </div>
@@ -356,6 +277,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+
     </div>
   );
 }

@@ -14,15 +14,15 @@ import { useAuth } from "../lib/auth";
 
 function Wordmark() {
   return (
-    <Link to="/" className="group inline-flex flex-col leading-none" aria-label="Throne of Grace Integrated Ventures — home">
+    <Link to="/" className="group inline-flex min-w-0 flex-col leading-none" aria-label="Throne of Grace Integrated Ventures — home">
       <span
-        className="text-[0.9375rem] font-semibold tracking-[0.14em]"
+        className="truncate text-[0.78rem] font-semibold tracking-[0.12em] sm:text-[0.9375rem] sm:tracking-[0.14em]"
         style={{ color: "var(--text)" }}
       >
         THRONE OF GRACE
       </span>
       <span
-        className="mt-0.5 text-[0.6875rem] tracking-[0.22em] uppercase transition-opacity duration-200 group-hover:opacity-80"
+        className="mt-0.5 truncate text-[0.58rem] uppercase tracking-[0.16em] transition-opacity duration-200 group-hover:opacity-80 sm:text-[0.6875rem] sm:tracking-[0.22em]"
         style={{ color: "var(--primary)" }}
       >
         Integrated Ventures
@@ -58,10 +58,10 @@ export default function Layout() {
       </a>
 
       <header
-        className="sticky top-0 z-40 border-b backdrop-blur"
-        style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--background) 88%, transparent)" }}
+        className="sticky top-0 z-40 border-b backdrop-blur transition-all duration-300"
+        style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--background) 90%, transparent)" }}
       >
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-6 px-5">
+        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-2 px-3 sm:h-16 sm:gap-6 sm:px-5">
           <Wordmark />
 
           <nav aria-label="Primary" className="hidden items-center gap-1 sm:flex">
@@ -71,15 +71,12 @@ export default function Layout() {
             <NavLink to="/request" className={navLinkClass} style={navLinkStyle}>
               Request
             </NavLink>
-            <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
-              Track
-            </NavLink>
             <NavLink to="/safety" className={navLinkClass} style={navLinkStyle}>
               Safety
             </NavLink>
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {loading ? (
               <span className="text-sm" style={{ color: "var(--text-muted)" }} aria-hidden="true">
                 ···
@@ -88,15 +85,20 @@ export default function Layout() {
               <>
                 <NavLink
                   to="/account"
-                  className={navLinkClass}
+                  className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center`}
                   style={navLinkStyle}
                 >
-                  My requests
+                  <span className="sm:hidden">My orders</span>
+                  <span className="hidden sm:inline">My requests</span>
                 </NavLink>
                 <button
                   type="button"
-                  onClick={() => void logout()}
-                  className="rounded-full px-3.5 py-1.5 text-sm transition-colors"
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to sign out?")) {
+                      void logout();
+                    }
+                  }}
+                  className="inline-flex min-h-[44px] items-center rounded-full px-2.5 py-1.5 text-sm transition-colors sm:px-3.5"
                   style={{ color: "var(--text-muted)" }}
                 >
                   Sign out
@@ -104,6 +106,13 @@ export default function Layout() {
               </>
             ) : (
               <>
+                <Link
+                  to="/login"
+                  className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium sm:hidden"
+                  style={{ color: "var(--text)" }}
+                >
+                  Login
+                </Link>
                 <Link
                   to="/login"
                   className="t-btn t-btn--secondary t-btn--sm hidden sm:inline-flex"
@@ -117,8 +126,11 @@ export default function Layout() {
                   className="t-btn t-btn--primary t-btn--sm"
                   style={{ borderRadius: "var(--radius-pill)" }}
                 >
-                  Register
-                  <ArrowRight size={15} aria-hidden="true" />
+                  <span className="sm:hidden">Register</span>
+                  <span className="hidden sm:inline-flex items-center gap-1.5">
+                    Register
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </span>
                 </Link>
               </>
             )}
@@ -128,31 +140,35 @@ export default function Layout() {
         {/* Mobile nav */}
         <nav
           aria-label="Primary (mobile)"
-          className="flex gap-1 border-t px-4 py-2 sm:hidden"
-          style={{ borderColor: "var(--border)" }}
+          className="flex gap-1 overflow-x-auto border-t px-3 py-2 sm:hidden scrollbar-none"
+          style={{ borderColor: "var(--border)", WebkitOverflowScrolling: "touch" }}
         >
-          <NavLink to="/" end className={navLinkClass} style={navLinkStyle}>
+          <NavLink to="/" end className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center shrink-0`} style={navLinkStyle}>
             Home
           </NavLink>
-          <NavLink to="/request" className={navLinkClass} style={navLinkStyle}>
-            Request
+          <NavLink to="/request" className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center shrink-0`} style={navLinkStyle}>
+            Request refill
           </NavLink>
-          <NavLink to="/track" className={navLinkClass} style={navLinkStyle}>
-            Track
-          </NavLink>
-          <NavLink to="/safety" className={navLinkClass} style={navLinkStyle}>
-            Safety
-          </NavLink>
+          {user ? (
+            <NavLink to="/account" className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center shrink-0`} style={navLinkStyle}>
+              My orders
+            </NavLink>
+          ) : (
+            <NavLink to="/safety" className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center shrink-0`} style={navLinkStyle}>
+              Safety
+            </NavLink>
+          )}
         </nav>
 
         {/* Brand rule: blue → red */}
-        <div className="t-rule" aria-hidden="true" style={{ height: 2 }} />
+        <div className="t-rule anim-fade-in" aria-hidden="true" style={{ height: 2 }} />
       </header>
 
       <main
         id="main"
         key={location.pathname}
-        className="t-page-in mx-auto w-full max-w-5xl flex-1 px-5 py-10"
+        className="t-page-in mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-5 sm:py-10"
+        style={{ paddingBottom: "max(2rem, env(safe-area-inset-bottom))" }}
       >
         <Outlet />
       </main>
@@ -171,13 +187,21 @@ export default function Layout() {
 
           <div>
             <p className="text-sm font-semibold" style={{ color: "var(--accent)" }}>
-              In an emergency
+              Emergency information
             </p>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
-              If you smell gas, move to open air, avoid switches and flames, and call
-              your emergency line. Published emergency numbers are added from verified
-              business settings before launch.
-            </p>
+            <div className="mt-2 space-y-2 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
+              <p>
+                If you smell gas or suspect a leak, do not switch lights/appliances on or off, avoid flames or sparks, and move everyone to fresh air.
+                If safe, open windows/doors for ventilation and turn off the cylinder valve.
+              </p>
+              <p>
+                <strong style={{ color: "var(--text)" }}>Emergency contacts:</strong>{" "}
+                <a href="tel:09013198496" className="font-medium" style={{ color: "var(--text)" }}>09013198496</a>
+                {" · "}
+                <a href="tel:08061265486" className="font-medium" style={{ color: "var(--text)" }}>08061265486</a>
+              </p>
+              <p>For fire or immediate danger to life or property, contact local emergency services right away.</p>
+            </div>
           </div>
 
           <div>

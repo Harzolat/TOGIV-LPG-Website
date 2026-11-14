@@ -26,8 +26,14 @@ export interface QrResolution {
   outcome: QrScanOutcome;
   /** Context for the SPA — contains NO personal information */
   context:
-    | { kind: "cylinder_registered"; cylinderId: string; capacityKg: number }
-    | { kind: "cylinder_unassigned"; serial: string }
+    | {
+        kind: "cylinder_registered";
+        cylinderId: string;
+        capacityKg: number;
+        serial: string;
+        qrCodeId: string;
+      }
+    | { kind: "cylinder_unassigned"; serial: string; qrCodeId: string }
     | { kind: "unrecognized" };
 }
 
@@ -109,21 +115,29 @@ export class QrService {
 
     const cylinder = qr.state?.cylinder;
     if (state === "active" && cylinder) {
-      // Registered cylinder — capacity only, NO owner/name/phone/address
+      // Registered cylinder — capacity/serial only, NO owner/name/phone/address.
+      // qrCodeId is an internal identifier (not a secret token) so the scan
+      // flow can submit a service-registration claim for this sticker.
       return {
         outcome: "valid",
         context: {
           kind: "cylinder_registered",
           cylinderId: cylinder.id,
           capacityKg: cylinder.cylinderType.capacityKg,
+          serial: qr.serial,
+          qrCodeId: qr.id,
         },
       };
     }
 
-    // Unassigned sticker: serial only (lets customer reference it in a claim)
+    // Unassigned sticker: serial lets a customer reference it in a claim.
     return {
       outcome: "valid",
-      context: { kind: "cylinder_unassigned", serial: qr.serial },
+      context: {
+        kind: "cylinder_unassigned",
+        serial: qr.serial,
+        qrCodeId: qr.id,
+      },
     };
   }
 

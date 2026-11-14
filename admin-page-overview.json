@@ -1,0 +1,305 @@
+{
+  "document": {
+    "title": "Throne of Grace Integrated Ventures — Admin/Operations Console Overview",
+    "purpose": "A complete, shareable description of the admin (staff operations) web app: what it is, who can use it, how it works, and everything it contains.",
+    "generatedFor": "Sharing with someone to understand the admin page in full",
+    "scope": "Admin/staff console (apps/admin) as implemented in the current codebase",
+    "note": "Aligned with the current operating plan: refill orders are fulfilled by the team going to the customer's location to refill the cylinder on-site, or by station refill. No cylinder is dispatched to the customer. 'Dispatched' for an on-site refill means the team is en route."
+  },
+  "product": {
+    "name": "TOGIV Operations — Admin Console",
+    "audience": "Staff/operators (roles such as super_admin, admin, agent, delivery as configured)",
+    "goal": "Provide a fast, clear workspace to monitor operations, triage and progress refill/service requests, review claims, view customer records, manage staff accounts (super admin), and see account/configuration status.",
+    "serviceModelAlignment": {
+      "refillFulfillment": "On-site refill (team travels to customer location and fills the cylinder there) or station refill (customer brings cylinder in).",
+      "dispatchTerminology": "For on-site refills, 'Dispatched' is treated/displayed as the team being en route (not a cylinder dispatched).",
+      "paymentRule": "Refill completion requires payment to be confirmed as paid or waived (enforced server-side); staff record/confirm payment in the request detail.",
+      "focus": "Operations centered on receiving and handling refill orders efficiently, with supporting claims/customer/staff management."
+    }
+  },
+  "technology": {
+    "type": "Single-page application (SPA)",
+    "stack": ["React", "TypeScript", "Vite", "React Router", "Tailwind/CSS tokens", "lucide-react icons"],
+    "uiLibrary": "Shared internal UI components (@togi/ui): Button, Card, StatusPill, Modal, Skeleton, EmptyState, ErrorState, Toasts, etc.",
+    "sharedDomain": "@togi/shared (types, status/transition helpers such as nextStaffStep)",
+    "devServer": {
+      "port": 5176,
+      "apiProxy": "Same-origin /api proxied to the API at http://localhost:3000"
+    },
+    "buildOutput": "Static production build (Vite), with lazy-loaded route pages",
+    "liveUpdates": "Smart polling + refresh on tab focus/visibility regain (no manual reload). Loaders stay silent when data exists to avoid flashing; last-good snapshots retained on transient poll errors where applicable."
+  },
+  "authenticationAndAccess": {
+    "method": "Staff sign-in with password + TOTP (two-factor authenticator code)",
+    "audience": "Admin/staff audience with separate, audience-bound session/CSRF cookies (isolated from customer sessions).",
+    "clientSecurity": {
+      "credentials": "Requests include credentials (cookies)",
+      "csrf": "Double-submit CSRF: admin_csrf cookie echoed as x-csrf-token on mutations; client can refresh via /auth/csrf and replay on CSRF expiry",
+      "headers": "Sends x-togi-audience: admin",
+      "errorHandling": "5xx surfaced as generic service-unavailable message; other errors surfaced from API payloads"
+    },
+    "loginFlow": {
+      "route": "/login",
+      "steps": [
+        "Password step: enter work email or phone + password; POST /auth/staff/login",
+        "If TOTP required: enter 6-digit authenticator code and POST /auth/staff/login again",
+        "If first login/enrollment required: server issues enrollment; client fetches setup (POST /auth/staff/enroll/setup) to show secret/otpauth URI, user adds authenticator and verifies with POST /auth/staff/enroll/verify",
+        "On success: session established, refresh /auth/staff/me, redirect to intended page (default /queue)"
+      ],
+      "properties": "Enumeration-resistant/uniformly timed behavior mirrored by UI; TOTP guesses count toward throttling/lockout (server-enforced)."
+    },
+    "sessionBootstrap": "GET /auth/staff/me to resolve current staff user (id, phone, email, fullName, department, roles, totpEnrolled); POST /auth/logout to sign out.",
+    "routeProtection": "All console routes except /login are behind a session gate (redirects anonymous users to /login, preserving intended destination). APIs enforce authorization/permissions server-side.",
+    "navigationGating": {
+      "customers": "Visible to roles admin or super_admin",
+      "team": "Visible to super_admin only"
+    }
+  },
+  "globalLayout": {
+    "header": {
+      "wordmark": "TOGIV OPERATIONS / Integrated Ventures (links to console home)",
+      "primaryNavDesktop": ["Overview (/overview)", "Queue (/queue)", "Claims (/claims)", "Customers (/customers, role-gated)", "Team (/team, super_admin only)", "Settings (/settings)"],
+      "primaryNavMobile": "Same items in a wrapped mobile nav (with same role gating)",
+      "identityArea": "Shows signed-in staff name/phone and a Sign out action",
+      "style": "Sticky, translucent backdrop header with brand rule accent"
+    },
+    "footer": {
+      "about": "Staff workspace — queue, claims, customers and settings for Throne of Grace Integrated Ventures.",
+      "emergencyNotice": "If you smell gas, move to open air, avoid switches and flames, and call your emergency line.",
+      "links": ["Request queue (/queue)", "Claims review (/claims)", "Account & settings (/settings)"],
+      "copyright": "© {year} Throne of Grace Integrated Ventures. All rights reserved."
+    },
+    "pageBehavior": "Lazy-loaded pages with spinner fallback; route-change page entrance styling."
+  },
+  "routesAndPages": [
+    {
+      "path": "/login",
+      "name": "Staff sign in",
+      "purpose": "Authenticate staff via password + TOTP (and first-time TOTP enrollment).",
+      "access": "Public; redirects to console if already signed in."
+    },
+    {
+      "path": "/overview",
+      "name": "Operations overview",
+      "purpose": "Landing dashboard showing live operational pressure and where to act next.",
+      "dataSource": "GET /admin/overview (polled ~8s)",
+      "displays": {
+        "kpis": [
+          "Needs attention (submitted/under review)",
+          "Active requests (before terminal state)",
+          "Open claims (pending decision)",
+          "Closed today (completed/resolved)"
+        ],
+        "pipeline": "Bar breakdown of key statuses in the active pipeline (e.g. Submitted, Received, Under review, Accepted, Processing, Dispatched/team en route)",
+        "oldestWaiting": "List of oldest requests needing attention with quick links to request detail and status pills",
+        "recentActivity": "Recent status moves (reference, from→to, actor, time)",
+        "handledToday": "Per-staff counts of status moves handled today",
+        "hints": "Keyboard/quick-triage tips and link to open the queue"
+      },
+      "states": ["Loading skeletons", "Error with retry", "Last-good snapshot note on poll hiccup"]
+    },
+    {
+      "path": "/queue",
+      "name": "Request queue",
+      "purpose": "High-throughput triage and progression of many requests at once without leaving the list.",
+      "dataSource": "GET /requests?status=... based on selected tab/view (polled ~8s); optimistic local updates on actions then reconciled",
+      "viewsAndFilters": {
+        "statusTabs": {
+          "active": ["Submitted", "Received", "UnderReview", "Accepted", "Processing", "Dispatched"],
+          "new": ["Submitted"],
+          "review": ["UnderReview"],
+          "progress": ["Received", "Accepted", "Processing", "Dispatched"],
+          "closed": ["Completed", "Resolved", "Rejected", "Cancelled", "Escalated"]
+        },
+        "typeFilters": ["all", "refill", "complaint", "enquiry"] ,
+        "search": "Search by reference, name, or phone",
+        "sort": "Oldest first / newest first toggle"
+      },
+      "rowDesign": {
+        "density": "Compact, high-density rows optimized for handling many customers quickly",
+        "shows": [
+          "Reference (link to detail)",
+          "Customer name/guest and contact phone",
+          "Compact context (On-site/Station for refills, or request type) and unpaid/payment-pending flag for refills when applicable",
+          "Age (relative time, with full timestamp on hover/title)",
+          "Current status pill with contextual label (e.g. 'Team en route' for on-site refill when dispatched)",
+          "Quick-advance action button (next normal step)"
+        ],
+        "listTitle": "Shows current view and visible count"
+      },
+      "actions": {
+        "quickAdvance": "One-click advances a request to the next normal step per the approved transition matrix (nextStaffStep). Reason-required moves open a confirmation modal requiring a short reason.",
+        "keyboardTriage": "j/k move selection, a advance selected, Enter open detail, / focus search",
+        "selection": "Click/keyboard selection highlights a row for quick actions"
+      },
+      "states": ["Skeleton loading", "Empty/no-match states with clear actions", "Error handling with last-good snapshot messaging when possible"],
+      "pollingIntervalMs": 8000
+    },
+    {
+      "path": "/requests/:id",
+      "name": "Request detail",
+      "purpose": "Full operator view of a single request: context, payment, status progression, attempts, and messages.",
+      "dataSource": "GET /requests/:id (polled ~10s)",
+      "displays": {
+        "header": ["Reference", "Type and refill option (on-site/station) with contextual meaning", "Submission time", "Contact phone (for coordination)", "Cylinder info when linked", "Current status pill (contextual label)"],
+        "payment": {
+          "summary": "Payment status, amount, method, and reference when present",
+          "editForm": "Record/confirm payment via POST /requests/:id/payment (status: unpaid/pending/paid/waived; method: cash/transfer/pos/other; amount in ₦ converted to kobo; reference; internal note)",
+          "guidance": "Warns when a refill is unpaid; completion is blocked until payment is Paid or Waived"
+        },
+        "statusActions": "Change status modal (matrix-validated server-side) posting to /requests/:id/transition with optional/recorded reason; notes that on-site 'Dispatched' means team en route",
+        "progress": "Status history timeline (collapsed by default to the latest update with 'Show all N updates' / 'Show latest only' toggle), showing from→to, notes, time, and internal/customer visibility marker",
+        "serviceAttempts": "Recorded service/visit attempts (attempt number, failure reason, status) when present",
+        "messages": "Messages with timestamps and internal markers when present"
+      },
+      "states": ["Loading skeletons", "Error with retry"]
+    },
+    {
+      "path": "/claims",
+      "name": "Claims queue",
+      "purpose": "Staff review queue for cylinder/service claims.",
+      "dataSource": "GET /claims (polled ~12s)",
+      "filters": ["all", "pending", "approved", "rejected", "withdrawn"],
+      "displays": "List with claimant/name, claim type, submission time, cylinder/QR serial context when available, and state pill; links to claim detail",
+      "states": ["Loading", "Empty/no-match", "Error with retry"]
+    },
+    {
+      "path": "/claims/:id",
+      "name": "Claim detail",
+      "purpose": "Review a claim, inspect evidence/history/cylinder context, and decide or reopen per rules.",
+      "dataSource": "GET /claims/:id (polled ~10s)",
+      "displays": {
+        "summary": "Claimant, claim type, submission time, cylinder serial/context, current state",
+        "evidence": "Customer evidence note and link-review-required flag when applicable",
+        "reviewState": "Current state projection, reviewed time, decision note",
+        "history": "Append-only event history (type, note, timestamps)",
+        "cylinder": "Serial/label/owner context when present"
+      },
+      "actions": {
+        "decide": "Approve or Reject (when pending) via POST /claims/:id/decide with optional/recommended decision note",
+        "reopen": "Reopen a rejected claim (requires reason) via POST /claims/:id/reopen, returning to pending with prior decision preserved in history"
+      },
+      "notes": "Approving a register claim registers service; cylinder ownership changes only on dispute approval as applicable. Decisions recorded in history; server enforces permissions/validation."
+    },
+    {
+      "path": "/customers",
+      "name": "Customers directory",
+      "purpose": "Browse customer records available to authorized staff.",
+      "access": "Nav shown to admin/super_admin; data access enforced server-side.",
+      "dataSource": "GET /customers (polled ~15s)",
+      "displays": "Filterable list (all/active in UI) showing name/phone and created/profile state; links to customer detail",
+      "states": ["Loading", "Empty", "Error with retry"]
+    },
+    {
+      "path": "/customers/:id",
+      "name": "Customer detail",
+      "purpose": "Read-only drill-down of a customer's profile and recent activity for operator context.",
+      "dataSource": "GET /customers/:id (polled ~15s)",
+      "displays": {
+        "identity": "Name, phone, email, state/LGA, customer since, status/suspension indicators",
+        "profile": "Contact/preferences/consent and request count",
+        "addresses": "Saved delivery addresses with default marker and notes",
+        "cylinders": "Registered cylinders (serial/label/capacity/condition)",
+        "recentRequests": "Recent requests linking into request detail",
+        "recentClaims": "Recent claims linking into claim detail"
+      },
+      "notes": "Read-only view; edit/suspend workflows not exposed here."
+    },
+    {
+      "path": "/team",
+      "name": "Team (staff management)",
+      "purpose": "Allow super admins to create and view staff accounts.",
+      "access": "Super-admin oriented (nav gated to super_admin; server enforces staff:manage/permissions).",
+      "dataSources": ["GET /admin/staff", "GET /admin/roles (polled ~20s)"] ,
+      "capabilities": {
+        "createStaff": {
+          "endpoint": "POST /admin/staff",
+          "fields": ["fullName (required)", "phone (required, unique/normalized)", "email (optional)", "department (optional)", "role (selection)", "temporary password (min 8 chars)"],
+          "outcome": "Creates staff account with hashed password/profile/role assignment; person sets up TOTP on first sign-in"
+        },
+        "listStaff": "Shows staff members with contact/department, roles, 2FA enrollment status, and last sign-in"
+      },
+      "states": ["Loading", "Empty", "Error with retry", "Success/error toasts"]
+    },
+    {
+      "path": "/settings",
+      "name": "Settings",
+      "purpose": "Show the signed-in operator's account info and clearly mark pending business configuration and security posture.",
+      "displays": {
+        "account": "Name, email, phone, department, roles, two-factor status, and sign out",
+        "businessConfigurationPending": [
+          "Price list pending approved values (estimates only)",
+          "Delivery zones pending business sign-off",
+          "Emergency numbers pending confirmed number",
+          "SMS provider pending (dev adapter until contracted)"
+        ],
+        "securityNotes": "Audience-scoped staff sessions, origin-checked + CSRF-protected mutations, and append-only audit trail for key actions"
+      }
+    },
+    {
+      "path": "/",
+      "name": "Index redirect",
+      "purpose": "Redirects to /overview."
+    },
+    {
+      "path": "*",
+      "name": "Not found",
+      "purpose": "Console 404 with link back to the queue."
+    }
+  ],
+  "keyWorkflows": {
+    "triageAndProgress": "Staff monitor Overview/Queue, search/filter, and advance requests quickly (one-click/keyboard) through matrix-validated steps, adding reasons where required.",
+    "onSiteRefillHandling": "For home/on-site refills, 'Dispatched' represents the team en route; staff coordinate using contact/location context and service attempts.",
+    "paymentAndCompletion": "Staff record/confirm payment on the request; refill cannot be completed until payment is paid or waived.",
+    "claimsReview": "Staff review pending claims with evidence/history, approve/reject with notes, and reopen rejected claims with reason when appropriate.",
+    "customerLookup": "Authorized staff browse/search directory context and drill into a customer's profile, addresses, cylinders, and recent requests/claims.",
+    "staffProvisioning": "Super admin creates staff accounts with role and temporary password; staff complete TOTP enrollment on first login."
+  },
+  "dataAndLiveUpdates": {
+    "pollingIntervals": {
+      "overviewMs": 8000,
+      "queueMs": 8000,
+      "requestDetailMs": 10000,
+      "claimDetailMs": 10000,
+      "claimsMs": 12000,
+      "customersMs": 15000,
+      "teamMs": 20000
+    },
+    "behavior": "Immediate load, periodic refresh while visible, refresh on focus/visibility, no overlapping requests, silent refresh when data exists."
+  },
+  "apiEndpointsUsedByAdminApp": [
+    { "method": "POST", "path": "/auth/staff/login", "use": "Staff password/TOTP login steps" },
+    { "method": "POST", "path": "/auth/staff/enroll/setup", "use": "Begin TOTP enrollment" },
+    { "method": "POST", "path": "/auth/staff/enroll/verify", "use": "Verify and persist TOTP enrollment" },
+    { "method": "GET", "path": "/auth/staff/me", "use": "Resolve current staff session" },
+    { "method": "POST", "path": "/auth/logout", "use": "Sign out" },
+    { "method": "GET", "path": "/auth/csrf", "use": "Refresh CSRF token/pair when needed" },
+    { "method": "GET", "path": "/admin/overview", "use": "Operations overview metrics and lists" },
+    { "method": "GET", "path": "/requests", "use": "Queue/list by status filters" },
+    { "method": "GET", "path": "/requests/:id", "use": "Request detail" },
+    { "method": "POST", "path": "/requests/:id/transition", "use": "Advance/change request status (matrix-validated)" },
+    { "method": "POST", "path": "/requests/:id/payment", "use": "Record/confirm request payment" },
+    { "method": "GET", "path": "/claims", "use": "Claims queue" },
+    { "method": "GET", "path": "/claims/:id", "use": "Claim detail" },
+    { "method": "POST", "path": "/claims/:id/decide", "use": "Approve/reject claim" },
+    { "method": "POST", "path": "/claims/:id/reopen", "use": "Reopen rejected claim" },
+    { "method": "GET", "path": "/customers", "use": "Customer directory" },
+    { "method": "GET", "path": "/customers/:id", "use": "Customer detail" },
+    { "method": "GET", "path": "/admin/staff", "use": "List staff accounts" },
+    { "method": "POST", "path": "/admin/staff", "use": "Create staff account (super admin)" },
+    { "method": "GET", "path": "/admin/roles", "use": "List assignable roles" }
+  ],
+  "designAndUsability": {
+    "palette": "Brand blue and red on dark/navy-toned surfaces consistent with the platform",
+    "efficiency": "Compact queue rows, quick-advance actions, keyboard triage, search/filter/sort, and live polling to manage many customers/requests quickly",
+    "clarity": "Contextual refill labels (on-site vs station, team en route), payment status/warnings, collapsible progress history, and clear empty/error/loading states",
+    "responsiveness": "Works across desktop and mobile widths (wrapped nav, flexible layouts)"
+  },
+  "knownConstraintsAndDeferred": {
+    "businessConfigPending": ["Approved price list", "Delivery zones/sign-off", "Confirmed emergency numbers", "Contracted SMS provider"],
+    "payments": "Manual/offline payment recording/confirmation in-console (no online gateway)",
+    "pagination": "Queue/list endpoints currently sized for current volume; very high volumes may require pagination later",
+    "accessControl": "UI hides some nav by role, but all sensitive actions/data are enforced by server-side permissions"
+  },
+  "summaryForSharing": "The admin page is TOGIV Operations, a staff console for Throne of Grace Integrated Ventures. Staff sign in with password + TOTP and land on a live Overview dashboard. The core is a compact, high-throughput Queue for triaging many refill requests quickly (search/filter/sort, one-click or keyboard advance, contextual on-site/station and 'team en route' labels, unpaid indicators). Request Detail lets staff view full context, record/confirm payment (required before refill completion), change status with audit-friendly reasons, and review a collapsible progress timeline and service attempts. Staff can review/decide/reopen Claims, browse Customers and drill into profiles, and (super admins) create/manage Team accounts; Settings shows account, security posture, and pending business configuration. The console updates live without reloads and is aligned to the on-site/station refill model (no cylinder dispatched)."
+}

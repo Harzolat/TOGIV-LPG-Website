@@ -13,11 +13,45 @@ export interface RequestListItem {
   reference: string;
   type: RequestType;
   status: RequestStatus;
+  deliveryMethod?: "home" | "station" | null;
   /** Present on the staff queue only. */
   contactPhone?: string | null;
   customer?: { id: string; fullName: string } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** `GET /admin/overview` — the console's at-a-glance operations summary. */
+export interface AdminOverview {
+  generatedAt: string;
+  counts: {
+    submitted: number;
+    received: number;
+    underReview: number;
+    accepted: number;
+    processing: number;
+    dispatched: number;
+    /** Everything before a terminal state. */
+    active: number;
+    /** Submitted + UnderReview — the rows that need a human decision. */
+    needsAttention: number;
+    completedToday: number;
+    openClaims: number;
+  };
+  byStatus: Array<{ status: RequestStatus; count: number }>;
+  oldestWaiting: RequestListItem[];
+  activity: Array<{
+    id: string;
+    reference: string;
+    type: RequestType;
+    fromStatus: RequestStatus | null;
+    toStatus: RequestStatus;
+    actorKind: string;
+    actorName: string | null;
+    createdAt: string;
+  }>;
+  /** Staff transitions recorded today, busiest first. */
+  todayByActor: Array<{ actorId: string; name: string; count: number }>;
 }
 
 export interface StatusHistoryEntry {
@@ -34,6 +68,14 @@ export interface StatusHistoryEntry {
 export interface RequestDetail extends RequestListItem {
   payload: Record<string, unknown>;
   priceEstimateKobo?: number | null;
+  deliveryMethod?: "home" | "station" | null;
+  cylinderId?: string | null;
+  cylinder?: {
+    id: string;
+    serial: string | null;
+    label: string | null;
+    cylinderType?: { capacityKg: number; label: string } | null;
+  } | null;
   statusHistory: StatusHistoryEntry[];
   messages: Array<{ id: string; body: string; internal: boolean; createdAt: string }>;
   deliveries: Array<{
@@ -109,6 +151,51 @@ export interface ClaimListItem {
 export interface ClaimDetail extends CylinderClaim {
   state: CylinderClaimState | null;
   events: ClaimEvent[];
+}
+
+// ───────────────────────────── Cylinders & QR ─────────────────────────────
+
+export interface CylinderTypeInfo {
+  capacityKg: number;
+  label: string;
+}
+
+export interface CustomerCylinder {
+  id: string;
+  serial: string | null;
+  label: string | null;
+  brand?: string | null;
+  condition: string;
+  registeredAt: string;
+  cylinderType: CylinderTypeInfo;
+}
+
+export type QrResolveOutcome = "valid" | "invalid" | "deactivated" | "revoked" | "replaced";
+
+export type QrResolveContext =
+  | { kind: "cylinder_registered"; cylinderId: string; capacityKg: number; serial?: string | null; qrCodeId?: string }
+  | { kind: "cylinder_unassigned"; serial: string; qrCodeId?: string }
+  | { kind: "unrecognized" };
+
+export interface QrResolveResult {
+  outcome: QrResolveOutcome;
+  context: QrResolveContext;
+}
+
+// ───────────────────────────── Staff management ─────────────────────────────
+
+export interface StaffMember {
+  id: string;
+  phone: string;
+  email: string | null;
+  status: string;
+  fullName: string;
+  department: string | null;
+  employeeRef: string | null;
+  roles: string[];
+  totpEnrolled: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
 }
 
 // ───────────────────────────── Customers ─────────────────────────────

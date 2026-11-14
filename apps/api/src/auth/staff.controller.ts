@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   Get,
   HttpCode,
   HttpException,
+  Patch,
   Post,
   Req,
   Res,
@@ -14,6 +17,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { PrismaClient, User } from "@prisma/client";
 import { decryptSecret, encryptSecret } from "../common/crypto";
+import { normalizeNgPhone } from "../common/phone";
 import {
   signState,
   StateTokenError,
@@ -62,6 +66,20 @@ const enrollVerifySchema = z.object({
   enrollmentToken: z.string().min(20).max(600),
   secret: z.string().regex(/^[A-Z2-7]{16,64}$/, "Invalid TOTP secret format."),
   code: z.string().regex(/^\d{6}$/),
+});
+
+const profileUpdateSchema = z.object({
+  fullName: z.string().trim().min(2).max(120).optional(),
+  department: z.string().trim().max(80).nullable().optional(),
+  phone: z.string().trim().min(6).max(20).optional(),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(200)
+    .nullable()
+    .optional()
+    .transform((v) => (typeof v === "string" ? v.toLowerCase() : v)),
 });
 
 const ENROLL_TTL_MS = 15 * 60_000;
@@ -232,6 +250,100 @@ export class StaffAuthController {
       roles: user.roles.map((ur) => ur.role.key),
       totpEnrolled: Boolean(user.staffProfile?.totpEnrolledAt),
     };
+  }
+
+  @Patch("profile")
+  @RequireAudience("admin")
+  async updateProfile(@Body() body: unknown, @Req() req: AuthedRequest) {
+    const parsed = profileUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues.map((i) => `${i.path.join(".") || "field"}: ${i.message}`).join("; "),
+      );
+    }
+
+    const data = parsed.data;
+    const userId = req.user!.id;
+    const existing = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { staffProfile: true },
+    });
+    if (!existing || existing.kind !== "staff" || existing.deletedAt) {
+      throw new ForbiddenException("Account not found.");
+    }
+
+    let nextPhone: string | undefined;
+    if (data.phone !== undefined) {
+      try {
+        nextPhone = normalizeNgPhone(data.phone);
+      } catch {
+        throw new BadRequestException("Enter a valid Nigerian phone number.");
+      }
+      if (nextPhone !== existing.phone) {
+        const phoneConflict = await this.prisma.user.findFirst({
+          where: { phone: nextPhone, id: { not: userId }, deletedAt: null },
+          select: { id: true },
+        });
+        if (phoneConflict) {
+          throw new ConflictException("This phone number is already used by another account.");
+        }
+      }
+    }
+
+    if (data.email !== undefined && data.email !== null) {
+      const conflict = await this.prisma.user.findFirst({
+        where: {
+          id: { not: userId },
+          email: { equals: data.email, mode: "insensitive" },
+        },
+        select: { id: true },
+      });
+      if (conflict) {
+        throw new ConflictException("This email is already used by another account.");
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (data.email !== undefined || nextPhone !== undefined) {
+        await tx.user.update({
+          where: { id: userId },
+          data: {
+            ...(data.email !== undefined ? { email: data.email } : {}),
+            ...(nextPhone !== undefined ? { phone: nextPhone } : {}),
+          },
+        });
+      }
+      if (data.fullName !== undefined || data.department !== undefined) {
+        await tx.staffProfile.upsert({
+          where: { userId },
+          update: {
+            ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
+            ...(data.department !== undefined ? { department: data.department } : {}),
+          },
+          create: {
+            userId,
+            fullName: data.fullName ?? existing.staffProfile?.fullName ?? "Staff",
+            department: data.department ?? null,
+          },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: "staff.profile_updated",
+          entityType: "user",
+          entityId: userId,
+          after: {
+            ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
+            ...(data.department !== undefined ? { department: data.department } : {}),
+            ...(data.email !== undefined ? { email: data.email } : {}),
+            ...(nextPhone !== undefined ? { phone: nextPhone } : {}),
+          },
+        },
+      });
+    });
+
+    return { ok: true };
   }
 
   // ── helpers ─────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useCallback, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { Button, Card, ErrorState, Skeleton, StatusPill } from "@togi/ui";
+import { usePolling } from "../lib/usePolling";
+import { Button, Card, ErrorState, Skeleton, StatusPill, useToast } from "@togi/ui";
 import type { CustomerDetail as CustomerDetailPayload } from "@togi/shared";
 
 /**
@@ -29,8 +30,11 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [data, setData] = useState<CustomerDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -42,9 +46,26 @@ export default function CustomerDetail() {
     }
   }, [id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  usePolling(load, { intervalMs: 15_000 });
+
+  async function removeCustomer() {
+    if (!id || !data) return;
+    const ok = window.confirm(`Delete customer ${data.fullName} (${data.phone})? This will revoke their access.`);
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await api(`/customers/${id}`, { method: "DELETE" });
+      toast({ message: "Customer deleted.", tone: "success" });
+      navigate("/customers", { replace: true });
+    } catch (err) {
+      toast({
+        message: err instanceof ApiError ? err.message : "Could not delete customer.",
+        tone: "error",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -52,7 +73,7 @@ export default function CustomerDetail() {
         ← Back to customers
       </Link>
 
-      {error ? (
+      {error && !data ? (
         <ErrorState
           title="Couldn't open this customer"
           description={error}
@@ -89,6 +110,9 @@ export default function CustomerDetail() {
                   Suspended {formatDate(data.suspendedAt)}
                 </span>
               ) : null}
+              <Button variant="danger" size="sm" loading={deleting} onClick={() => void removeCustomer()}>
+                Delete customer
+              </Button>
             </div>
           </div>
 
@@ -188,32 +212,7 @@ export default function CustomerDetail() {
             )}
           </Card>
 
-          <Card className="mt-5" padded title="Recent claims">
-            {data.claims.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                No claims submitted.
-              </p>
-            ) : (
-              <ul className="divide-y divide-[var(--border)]">
-                {data.claims.map((c) => (
-                  <li key={c.id}>
-                    <Link
-                      to={`/claims/${c.id}`}
-                      className="flex items-center justify-between gap-4 py-2.5 transition-opacity hover:opacity-80"
-                    >
-                      <span className="min-w-0">
-                        <span className="block font-mono text-sm font-semibold">{c.id}</span>
-                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                          {c.claimType.replace(/_/g, " ")} · {formatDate(c.createdAt)}
-                        </span>
-                      </span>
-                      <StatusPill status={c.state} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+
         </>
       )}
     </div>

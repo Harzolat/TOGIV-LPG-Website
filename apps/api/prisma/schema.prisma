@@ -34,24 +34,31 @@ enum UserStatus {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  phone        String // unique among non-deleted rows — partial index, see note above
-  email        String?    @unique
-  passwordHash String?
-  kind         UserKind   @default(customer)
-  status       UserStatus @default(active)
-  lastLoginAt  DateTime?
-  deletedAt    DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id              String     @id @default(uuid())
+  phone           String // one credential, one account — full unique index (migration 0003)
+  email           String?    @unique // case-insensitive uniqueness enforced by lower(email) index
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+  passwordHash    String?
+  kind            UserKind   @default(customer)
+  status          UserStatus @default(active)
+  lastLoginAt     DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  customerProfile CustomerProfile?
-  staffProfile    StaffProfile?
-  roles           UserRole[]
-  sessions        Session[]
-  notifications   Notification[]
-  requestedReqs   ServiceRequest[] @relation("RequestRequestedBy")
-  auditLogs       AuditLog[]       @relation("AuditActor")
+  customerProfile        CustomerProfile?
+  staffProfile           StaffProfile?
+  roles                  UserRole[]
+  sessions               Session[]
+  notifications          Notification[]
+  requestedReqs          ServiceRequest[]        @relation("RequestRequestedBy")
+  auditLogs              AuditLog[]              @relation("AuditActor")
+  authIdentities         CustomerAuthIdentity[]
+  passkeyCredentials     PasskeyCredential[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens    PasswordResetToken[]
+  webauthnChallenges     WebAuthnChallenge[]
 
   @@index([kind, status])
 }
@@ -420,6 +427,13 @@ model ServiceRequest {
   deliveryMethod DeliveryMethod?
   payload        Json // type-specific fields (zod-validated per type)
   priceEstimateKobo Int?
+  paymentStatus      String    @default("unpaid") // unpaid | pending | paid | waived
+  paymentMethod      String?   // cash | transfer | pos | other
+  paymentAmountKobo  Int?
+  paymentReference   String?
+  paymentNote        String?
+  paymentConfirmedAt DateTime?
+  paymentConfirmedById String?
   zoneId         String?
   branchId       String?
   guestLinkedAt  DateTime?
@@ -450,6 +464,7 @@ model ServiceRequest {
   @@index([contactPhone]) // guest-link candidate lookup
   @@index([assignedStaffId, status])
   @@index([type, status])
+  @@index([paymentStatus])
 }
 
 // Append-only (INSERT-only): status transitions never rewrite history.
@@ -652,6 +667,95 @@ model OtpCode {
 
   @@index([phone, purpose, createdAt])
   @@index([ip, createdAt])
+  @@index([expiresAt])
+}
+
+// External customer auth identities (e.g. Google). Provider subject/email are
+// stored only after server-side verification; linking must be ownership-checked.
+model CustomerAuthIdentity {
+  id              String   @id @default(uuid())
+  userId          String
+  provider        String // e.g. "google"
+  providerSubject String
+  email           String?
+  emailVerified   Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubject])
+  @@unique([provider, userId])
+  @@index([userId])
+}
+
+// WebAuthn passkey credentials (public keys/counters only; never biometrics).
+model PasskeyCredential {
+  id           String    @id @default(uuid())
+  userId       String
+  credentialId String    @unique // base64url credential ID
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  transports   String[]  @default([])
+  deviceType   String?
+  backedUp     Boolean   @default(false)
+  name         String?
+  aaguid       String?
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+// Hashed, single-use, time-limited email verification tokens.
+model EmailVerificationToken {
+  id         String    @id @default(uuid())
+  userId     String
+  email      String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  ip         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// Hashed, single-use, time-limited password reset tokens.
+model PasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+  ip         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+// Short-lived WebAuthn ceremony challenges (registration/authentication).
+model WebAuthnChallenge {
+  id         String    @id @default(uuid())
+  userId     String?
+  type       String // register | authenticate
+  challenge  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, createdAt])
   @@index([expiresAt])
 }
 

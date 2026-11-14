@@ -1,23 +1,19 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { api, ApiError, getCsrfToken } from "../lib/api";
-import { useAuth } from "../lib/auth";
 import { Button, TextInput } from "@togi/ui";
-
-/**
- * Sign in / register — customer OTP flow (v1.2 §12):
- * 1. phone (+ name for register) → POST /auth/otp/request (sets CSRF cookie)
- * 2. 6-digit code → POST /auth/otp/verify (CSRF in header AND body)
- *
- * Server responses are enumeration-resistant: the message never reveals
- * whether the number has an account; throttles surface as friendly errors
- * with a Retry-After hint.
- */
-
-type Step = "phone" | "code";
+import { api, ApiError } from "../lib/api";
+import { useAuth } from "../lib/auth";
 
 interface Props {
   mode: "login" | "register";
+}
+
+function isValidNgPhone(value: string): boolean {
+  return /^(?:\+?234|0)?[789][01]\d{8}$/.test(value.replace(/[\s\-().]/g, ""));
+}
+
+function isValidPin(value: string): boolean {
+  return /^\d{4}$/.test(value);
 }
 
 export default function Auth({ mode }: Props) {
@@ -25,204 +21,180 @@ export default function Auth({ mode }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from ?? "/account";
-
-  const [step, setStep] = useState<Step>("phone");
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [devCode, setDevCode] = useState<string | null>(null);
-  const codeRef = useRef<HTMLInputElement>(null);
-
   const isRegister = mode === "register";
 
-  const phoneValid = useMemo(() => {
-    const digits = phone.replace(/[\s\-().]/g, "");
-    return /^(?:\+?234|0)?[789][01]\d{8}$/.test(digits);
-  }, [phone]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
+  const [address, setAddress] = useState("");
+
+  const phoneValid = useMemo(() => isValidNgPhone(phone), [phone]);
 
   if (!loading && user) return <Navigate to={from} replace />;
 
-  async function requestCode(e?: React.FormEvent) {
-    e?.preventDefault();
-    setError(null);
-    if (!phoneValid) {
-      setError("Enter a valid Nigerian number, e.g. 0803 123 4567.");
-      return;
-    }
-    if (isRegister && name.trim().length < 2) {
-      setError("Please enter your name.");
-      return;
-    }
-    setBusy(true);
-    try {
-      // purpose must match the one used on verify, or the API looks for a
-      // code it never issued ("register" codes are separate from "login")
-      const res = await api<{
-        ok: true;
-        csrfToken: string;
-        message: string;
-        devCode?: string;
-      }>("/auth/otp/request", {
-        method: "POST",
-        body: { phone: phone.trim(), purpose: isRegister ? "register" : "login" },
-      });
-      setNotice(res.message);
-      // Present only when the API runs in dev with OTP_DEV_ECHO=true.
-      setDevCode(res.devCode ?? null);
-      setStep("code");
-      // Focus the code input once rendered
-      setTimeout(() => codeRef.current?.focus(), 50);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not send the code.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function verify(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!/^\d{6}$/.test(code)) {
-      setError("Enter the 6-digit code.");
+
+    if (!phoneValid) {
+      setError("Enter a valid Nigerian phone number.");
       return;
     }
+    if (!isValidPin(pin)) {
+      setError("Enter a 4-digit PIN.");
+      return;
+    }
+
+    if (isRegister) {
+      if (fullName.trim().length < 2) {
+        setError("Please enter your full name.");
+        return;
+      }
+      if (pin !== confirmPin) {
+        setError("PIN confirmation does not match.");
+        return;
+      }
+      if (address.trim().length < 5) {
+        setError("Please enter your residential/delivery address.");
+        return;
+      }
+    }
+
     setBusy(true);
     try {
-      const csrf = getCsrfToken();
-      await api("/auth/otp/verify", {
-        method: "POST",
-        body: {
-          phone: phone.trim(),
-          code,
-          purpose: isRegister ? "register" : "login",
-          ...(csrf ? { csrfToken: csrf } : {}),
-          ...(isRegister ? { fullName: name.trim() } : {}),
-        },
-      });
+      if (isRegister) {
+        await api("/auth/customer/register", {
+          method: "POST",
+          body: {
+            fullName: fullName.trim(),
+            phone: phone.trim(),
+            pin,
+            confirmPin,
+            address: address.trim(),
+          },
+        });
+      } else {
+        await api("/auth/customer/login", {
+          method: "POST",
+          body: { phone: phone.trim(), pin },
+        });
+      }
       await refresh();
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Verification failed.");
-      setCode("");
-      codeRef.current?.focus();
+      if (err instanceof ApiError) {
+        setError(err.message || "Unable to sign in. Please try again.");
+      } else {
+        setError("Unable to sign in. Please try again.");
+      }
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-md">
-      <div className="t-card t-card--pad">
+    <div className="mx-auto max-w-md anim-enter">
+      <div className="t-card t-card--pad shadow-sm">
         <h1 className="text-xl font-semibold tracking-tight">
           {isRegister ? "Create your account" : "Sign in"}
         </h1>
         <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
           {isRegister
-            ? "One number, one account — your requests, cylinders and claims together."
-            : "We'll text you a code. No passwords to remember."}
+            ? "Register with your phone number and a 4-digit PIN to manage your requests."
+            : "Sign in with your phone number and 4-digit PIN."}
         </p>
 
-        {step === "phone" ? (
-          <form onSubmit={requestCode} className="mt-6 space-y-5" noValidate>
-            {isRegister ? (
-              <TextInput
-                label="Full name"
-                autoComplete="name"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            ) : null}
+        <form onSubmit={submit} className="mt-6 space-y-4 stagger-children" noValidate>
+          {isRegister ? (
             <TextInput
-              label="Phone number"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="0803 123 4567"
+              label="Full name"
+              autoComplete="name"
               required
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
             />
-            {error ? (
-              <p role="alert" className="text-sm" style={{ color: "var(--error)" }}>
-                {error}
-              </p>
-            ) : null}
-            <Button type="submit" size="lg" block loading={busy}>
-              Send me a code
-            </Button>
-          </form>
-        ) : (
-          <form onSubmit={verify} className="mt-6 space-y-5" noValidate>
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              {notice ?? "Enter the code we sent to"}{" "}
-              <strong style={{ color: "var(--text)" }}>{phone}</strong>
-            </p>
+          ) : null}
 
-            {devCode ? (
-              <div
-                role="status"
-                className="rounded-lg px-3 py-2 text-sm"
-                style={{ background: "var(--accent-surface)", color: "var(--accent-text)" }}
-              >
-                Development mode — no SMS is sent. Your code is{" "}
-                <strong style={{ letterSpacing: "0.14em" }}>{devCode}</strong>
-              </div>
-            ) : null}
+          <TextInput
+            label="Phone number"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel"
+            placeholder="0803 123 4567"
+            hint="Nigerian mobile number"
+            required
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
 
+          <TextInput
+            label="4-digit PIN"
+            type={showPin ? "text" : "password"}
+            inputMode="numeric"
+            autoComplete={isRegister ? "new-password" : "current-password"}
+            maxLength={4}
+            placeholder="••••"
+            required
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+          />
+
+          {isRegister ? (
             <TextInput
-              ref={codeRef}
-              className="t-field--code"
-              label="Verification code"
+              label="Confirm 4-digit PIN"
+              type={showPin ? "text" : "password"}
               inputMode="numeric"
-              autoComplete="one-time-code"
-              maxLength={6}
-              placeholder="••••••"
+              autoComplete="new-password"
+              maxLength={4}
+              placeholder="••••"
               required
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              error={error ?? undefined}
+              value={confirmPin}
+              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
             />
+          ) : null}
 
-            <Button type="submit" size="lg" block loading={busy} disabled={code.length !== 6}>
-              Verify
-            </Button>
+          <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
+            <input type="checkbox" checked={showPin} onChange={(e) => setShowPin(e.target.checked)} />
+            Show PIN
+          </label>
 
-            <div className="flex items-center justify-between text-sm">
-              <button
-                type="button"
-                className="underline"
-                style={{ color: "var(--text-muted)" }}
-                onClick={() => {
-                  setStep("phone");
-                  setCode("");
-                  setError(null);
-                  setDevCode(null);
-                }}
-              >
-                Change number
-              </button>
-              <button
-                type="button"
-                className="underline"
-                style={{ color: "var(--text-muted)" }}
-                disabled={busy}
-                onClick={() => void requestCode()}
-              >
-                Resend code
-              </button>
-            </div>
-          </form>
-        )}
+          {isRegister ? (
+            <TextInput
+              label="Residential/Delivery address"
+              required
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Enter your residential or delivery address"
+            />
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="text-sm" style={{ color: "var(--error)" }}>
+              {error}
+            </p>
+          ) : null}
+
+          <Button type="submit" size="lg" block loading={busy}>
+            {isRegister ? "Create account" : "Sign in"}
+          </Button>
+        </form>
+
+        {!isRegister ? (
+          <p className="mt-4 text-sm" style={{ color: "var(--text-muted)" }}>
+            Need help accessing your account? Please contact support for assistance.
+          </p>
+        ) : null}
       </div>
 
       <p className="mt-5 text-center text-sm" style={{ color: "var(--text-muted)" }}>
         {isRegister ? (
           <>
-            Already registered?{" "}
+            Already have an account?{" "}
             <Link to="/login" className="font-medium underline" style={{ color: "var(--text)" }}>
               Sign in
             </Link>

@@ -4,6 +4,7 @@ import {
   canTransition,
   CUSTOMER_CANCELABLE,
   isTerminal,
+  nextStaffStep,
   parentEffectFor,
   TransitionError,
   validateTransition,
@@ -250,6 +251,55 @@ describe("retry eligibility — v1.2.4 corrected semantics", () => {
 
   it("max_retries = 0 means only the original attempt", () => {
     expect(canCreateRetry(1, 0, false)).toBe(false);
+  });
+});
+
+describe("nextStaffStep", () => {
+  it("walks the normal refill chain", () => {
+    expect(nextStaffStep("refill", "Submitted")).toEqual({
+      to: "Received",
+      reasonRequired: false,
+    });
+    expect(nextStaffStep("refill", "UnderReview")?.to).toBe("Accepted");
+    expect(nextStaffStep("refill", "Processing")?.to).toBe("Dispatched");
+    expect(nextStaffStep("refill", "Dispatched")?.to).toBe("Completed");
+  });
+
+  it("marks complaint resolution as reason-required", () => {
+    expect(nextStaffStep("complaint", "Processing")).toEqual({
+      to: "Resolved",
+      reasonRequired: true,
+    });
+  });
+
+  it("completes an enquiry after review", () => {
+    expect(nextStaffStep("enquiry", "UnderReview")).toEqual({
+      to: "Completed",
+      reasonRequired: false,
+    });
+  });
+
+  it("returns null on terminal states", () => {
+    expect(nextStaffStep("refill", "Completed")).toBeNull();
+    expect(nextStaffStep("complaint", "Rejected")).toBeNull();
+  });
+
+  it("every step it returns is a valid staff transition", () => {
+    for (const type of ["refill", "complaint", "enquiry"] as RequestType[]) {
+      for (const from of ALL_STATUSES) {
+        const step = nextStaffStep(type, from);
+        if (!step) continue;
+        expect(
+          canTransition({
+            type,
+            from,
+            to: step.to,
+            actor: "staff",
+            reason: step.reasonRequired ? "because" : undefined,
+          }),
+        ).toBe(true);
+      }
+    }
   });
 });
 

@@ -32,9 +32,9 @@ const enquiryPayload = z.object({
 const inlineAddress = z.object({
   line1: z.string().min(3).max(200),
   line2: z.string().max(200).optional(),
-  city: z.string().min(2).max(100),
-  state: z.string().min(2).max(100),
-  lga: z.string().min(2).max(100),
+  city: z.string().min(1).max(100),
+  state: z.string().min(1).max(100),
+  lga: z.string().min(1).max(100),
   label: z.string().max(40).optional(),
   deliveryNote: z.string().max(300).optional(),
 });

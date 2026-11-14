@@ -56,6 +56,13 @@ export class ClaimsController {
         parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "),
       );
     }
+    const user = await this.prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, kind: true, status: true, deletedAt: true },
+    });
+    if (!user || user.kind !== "customer" || user.status !== "active" || user.deletedAt) {
+      throw new ForbiddenException("Account unavailable.");
+    }
     const customerId = await ensureCustomerProfile(this.prisma, req.user!.id);
     const d = parsed.data;
 

@@ -129,6 +129,8 @@ export class RequestService {
       });
       if (!request) throw new NotFoundException("Request not found.");
 
+      // Payment is not tracked in the app; refills can be completed after service is rendered.
+
       // Matrix validation (throws TransitionError with precise code)
       validateTransition({
         type: request.type,

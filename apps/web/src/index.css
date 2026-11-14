@@ -8,16 +8,34 @@
  *
  * Body defaults — premium/minimalist direction.
  */
+html,
+body {
+  max-width: 100%;
+}
+
 body {
   background: var(--background);
   color: var(--text);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* clip (not hidden) so .bleed-right can reach the viewport edge without a
-   * horizontal scrollbar when 100vw includes the scrollbar width — and
-   * position: sticky (app header) keeps working, unlike overflow-x: hidden. */
   overflow-x: clip;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Mobile-first rhythm */
+:root {
+  --page-px: 1rem;
+}
+@media (min-width: 640px) {
+  :root {
+    --page-px: 1.25rem;
+  }
 }
 
 /*
@@ -77,4 +95,133 @@ body {
   height: 24%;
   background: linear-gradient(180deg, transparent, var(--background));
   pointer-events: none;
+}
+
+/* --------------------------------------------------------------
+ * Enhanced motion & mobile responsiveness
+ * (respects prefers-reduced-motion; tokens.css also provides guards)
+ * -------------------------------------------------------------- */
+
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@keyframes fade-up-soft {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fade-in-soft {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes float-gentle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes sheen {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+.anim-enter {
+  animation: fade-up-soft 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.anim-enter-delay-1 { animation-delay: 0.06s; }
+.anim-enter-delay-2 { animation-delay: 0.12s; }
+.anim-enter-delay-3 { animation-delay: 0.18s; }
+.anim-fade-in {
+  animation: fade-in-soft 0.45s ease both;
+}
+
+/* Subtle interactive polish */
+.t-card, .t-btn {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 220ms ease,
+              background-color 220ms ease,
+              color 220ms ease,
+              opacity 220ms ease;
+}
+.t-btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+@media (hover: hover) {
+  .t-card:hover {
+    box-shadow: var(--shadow-md);
+  }
+}
+
+/* Mobile-first refinements */
+@media (max-width: 639px) {
+  .mx-auto.max-w-md .t-card.t-card--pad,
+  .t-card.t-card--pad {
+    padding: 1rem;
+    border-radius: 1rem;
+  }
+  h1 {
+    line-height: 1.15;
+  }
+  .t-btn.t-btn--lg, .t-btn.t-btn--md {
+    min-height: 46px;
+  }
+  main#main {
+    padding-top: 1.25rem;
+  }
+  .hero-scrim + .relative .max-w-2xl {
+    padding-top: 0.25rem;
+  }
+}
+
+/* Prevent layout shift/overflow on small screens */
+input, textarea, select, button {
+  max-width: 100%;
+}
+.t-card {
+  overflow-wrap: anywhere;
+}
+
+/* Stagger helper for lists/grids without JS */
+.stagger-children > * {
+  opacity: 0;
+  animation: fade-up-soft 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0.03s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.08s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.13s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.18s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.23s; }
+.stagger-children > *:nth-child(6) { animation-delay: 0.28s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-enter,
+  .anim-enter-delay-1,
+  .anim-enter-delay-2,
+  .anim-enter-delay-3,
+  .anim-fade-in,
+  .stagger-children > * {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Ensure CTAs remain clearly visible on dark/photo backgrounds */
+.t-btn--primary {
+  color: #05162e !important;
+  background: #7fb0ff !important;
+  border-color: #7fb0ff !important;
+}
+.t-btn--primary:hover:not(:disabled) {
+  background: #a6c8ff !important;
+  border-color: #a6c8ff !important;
+}
+.t-btn--secondary {
+  color: #eaf3ff !important;
+  border-color: rgba(127, 176, 255, 0.75) !important;
+  background: rgba(10, 44, 83, 0.35) !important;
+}
+.t-btn--secondary:hover:not(:disabled) {
+  background: rgba(127, 176, 255, 0.16) !important;
+  border-color: #a6c8ff !important;
+  color: #ffffff !important;
 }

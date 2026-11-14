@@ -1,6 +1,6 @@
-import { useId } from "react";
+import { forwardRef, useId } from "react";
 import type {
-  ComponentPropsWithRef,
+  ComponentPropsWithoutRef,
   ReactNode,
 } from "react";
 
@@ -51,17 +51,21 @@ export function Field({ label, hint, error, required, children, className }: Fie
 }
 
 export interface TextInputProps
-  extends Omit<ComponentPropsWithRef<"input">, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithoutRef<"input">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;
 }
 
-export function TextInput({ label, hint, error, required, className, ...rest }: TextInputProps) {
+export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function TextInput(
+  { label, hint, error, required, className, ...rest },
+  ref,
+) {
   return (
     <Field label={label} hint={hint} error={error} required={required} className={className}>
       {({ inputId, describedBy, invalid }) => (
         <input
+          ref={ref}
           id={inputId}
           className="t-input"
           aria-describedby={describedBy}
@@ -72,20 +76,24 @@ export function TextInput({ label, hint, error, required, className, ...rest }: 
       )}
     </Field>
   );
-}
+});
 
 export interface TextAreaProps
-  extends Omit<ComponentPropsWithRef<"textarea">, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithoutRef<"textarea">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;
 }
 
-export function TextArea({ label, hint, error, required, className, ...rest }: TextAreaProps) {
+export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function TextArea(
+  { label, hint, error, required, className, ...rest },
+  ref,
+) {
   return (
     <Field label={label} hint={hint} error={error} required={required} className={className}>
       {({ inputId, describedBy, invalid }) => (
         <textarea
+          ref={ref}
           id={inputId}
           className="t-input"
           aria-describedby={describedBy}
@@ -96,21 +104,25 @@ export function TextArea({ label, hint, error, required, className, ...rest }: T
       )}
     </Field>
   );
-}
+});
 
 export interface SelectProps
-  extends Omit<ComponentPropsWithRef<"select">, "id" | "aria-describedby" | "aria-invalid"> {
+  extends Omit<ComponentPropsWithoutRef<"select">, "id" | "aria-describedby" | "aria-invalid"> {
   label: string;
   hint?: string;
   error?: string;
   options: Array<{ value: string; label: string; disabled?: boolean }>;
 }
 
-export function Select({ label, hint, error, required, options, className, ...rest }: SelectProps) {
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
+  { label, hint, error, required, options, className, ...rest },
+  ref,
+) {
   return (
     <Field label={label} hint={hint} error={error} required={required} className={className}>
       {({ inputId, describedBy, invalid }) => (
         <select
+          ref={ref}
           id={inputId}
           className="t-input"
           aria-describedby={describedBy}
@@ -127,4 +139,4 @@ export function Select({ label, hint, error, required, options, className, ...re
       )}
     </Field>
   );
-}
+});

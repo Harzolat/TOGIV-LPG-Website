@@ -6,7 +6,6 @@ import { AuthProvider, useAuth } from "./lib/auth";
 import Home from "./pages/Home";
 
 const NewRequest = lazy(() => import("./pages/NewRequest"));
-const Track = lazy(() => import("./pages/Track"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Account = lazy(() => import("./pages/Account"));
 const AccountRequest = lazy(() => import("./pages/AccountRequest"));
@@ -54,22 +53,6 @@ export default function App() {
                 element={
                   <Suspense fallback={<PageFallback />}>
                     <NewRequest />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="track"
-                element={
-                  <Suspense fallback={<PageFallback />}>
-                    <Track />
-                  </Suspense>
-                }
-              />
-              <Route
-                path="track/:token"
-                element={
-                  <Suspense fallback={<PageFallback />}>
-                    <Track />
                   </Suspense>
                 }
               />

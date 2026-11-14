@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import dotenv from "dotenv";
 import { AppModule } from "./app.module";
 import { browserSecurityMiddleware } from "./common/http";
+import { securityHeaders } from "./common/security-headers";
 
 dotenv.config(); // local dev: apps/api/.env (production injects env directly)
 
@@ -12,6 +13,7 @@ async function bootstrap() {
 
   // Order matters: cookies first (middleware + guards read them), then
   // Origin/CSRF checks, before any route handler (v1.2 §12.4).
+  app.use(securityHeaders);
   app.use(cookieParser());
   app.use(browserSecurityMiddleware);
 
@@ -19,8 +21,8 @@ async function bootstrap() {
   // never '*', never Origin reflection.
   app.enableCors({
     origin: [
-      process.env.WEB_ORIGIN ?? "http://localhost:5173",
-      process.env.ADMIN_ORIGIN ?? "http://localhost:5174",
+      process.env.WEB_ORIGIN ?? "http://localhost:5175",
+      process.env.ADMIN_ORIGIN ?? "http://localhost:5176",
     ],
     credentials: true,
   });

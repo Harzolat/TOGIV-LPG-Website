@@ -1,9 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
+import { usePolling } from "../lib/usePolling";
 import type { RequestDetail, RequestStatus } from "../lib/types";
 import { Button, Card, ErrorState, Modal, Skeleton, StatusPill, useToast } from "@togi/ui";
 import { CUSTOMER_CANCELABLE_STATUSES } from "@togi/shared";
+
+function statusText(
+  status: RequestStatus,
+  type: string,
+  deliveryMethod?: string | null,
+): string {
+  if (type === "refill" && deliveryMethod === "home" && status === "Dispatched") {
+    return "Team en route";
+  }
+  return status.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+// Payment tracking removed from the website/app flow.
 
 /**
  * Request detail (owner view) — full customer-visible history:
@@ -32,9 +46,7 @@ export default function AccountRequest() {
     }
   }, [id]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  usePolling(load, { intervalMs: 12_000 });
 
   async function confirmCancel() {
     setCancelling(true);
@@ -56,7 +68,7 @@ export default function AccountRequest() {
     }
   }
 
-  if (error) {
+  if (error && !data) {
     return (
       <div className="mx-auto max-w-2xl">
         <ErrorState
@@ -107,14 +119,23 @@ export default function AccountRequest() {
         <div>
           <h1 className="font-mono text-xl font-semibold">{data.reference}</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            {data.type} · submitted{" "}
+            {data.type === "refill" ? "Refill" : data.type}
+            {data.deliveryMethod === "home"
+              ? " · On-site refill"
+              : data.deliveryMethod === "station"
+                ? " · Station refill"
+                : ""}{" "}
+            · submitted{" "}
             {new Date(data.createdAt).toLocaleString(undefined, {
               dateStyle: "medium",
               timeStyle: "short",
             })}
           </p>
         </div>
-        <StatusPill status={data.status} />
+        <StatusPill
+          status={data.status}
+          label={statusText(data.status, data.type, data.deliveryMethod)}
+        />
       </div>
 
       {canCancel ? (
@@ -129,6 +150,26 @@ export default function AccountRequest() {
             Cancel request
           </Button>
         </div>
+      ) : null}
+
+      {data.type === "refill" ? (
+        <Card className="mt-6" padded title="Refill details">
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt style={{ color: "var(--text-muted)" }}>Refill option</dt>
+              <dd className="mt-0.5 font-medium">
+                {data.deliveryMethod === "home"
+                  ? "On-site refill (we come to your location)"
+                  : "Station refill (bring your cylinder)"}
+              </dd>
+            </div>
+          </dl>
+          {data.deliveryMethod === "home" ? (
+            <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+              Our team fills your cylinder at your location — no cylinder is dispatched to you.
+            </p>
+          ) : null}
+        </Card>
       ) : null}
 
       {/* Timeline from append-only history */}
@@ -149,9 +190,9 @@ export default function AccountRequest() {
                 <div>
                   <p className="text-sm font-medium">
                     {h.fromStatus
-                      ? `${h.fromStatus.replace(/([a-z])([A-Z])/g, "$1 $2")} → `
+                      ? `${statusText(h.fromStatus, data.type, data.deliveryMethod)} → `
                       : ""}
-                    {h.toStatus.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                    {statusText(h.toStatus, data.type, data.deliveryMethod)}
                   </p>
                   {h.note ? (
                     <p className="mt-0.5 text-sm" style={{ color: "var(--text-muted)" }}>
@@ -171,9 +212,9 @@ export default function AccountRequest() {
         </ol>
       </Card>
 
-      {/* Delivery attempts (retries visible as history, v1.2 §A1) */}
+      {/* Service/visit attempts (when recorded) */}
       {data.deliveries.length > 0 ? (
-        <Card className="mt-5" padded title="Delivery attempts">
+        <Card className="mt-5" padded title="Service attempts">
           <ul className="space-y-3">
             {data.deliveries.map((d) => (
               <li key={d.id} className="flex items-center justify-between gap-3">

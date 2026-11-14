@@ -161,14 +161,17 @@
 .t-btn--sm {
   font-size: 0.8125rem;
   padding: 0.375rem 0.75rem;
+  min-height: 36px;
 }
 .t-btn--md {
   font-size: 0.9375rem;
   padding: 0.5rem 1rem;
+  min-height: 44px;
 }
 .t-btn--lg {
   font-size: 1rem;
   padding: 0.6875rem 1.375rem;
+  min-height: 48px;
 }
 .t-btn--block {
   width: 100%;
@@ -211,77 +214,120 @@
 }
 .t-input {
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  font-size: 1rem; /* >=16px avoids iOS input zoom */
   color: var(--text);
   background: var(--field);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  padding: 0.5625rem 0.75rem;
+  padding: 0.625rem 0.75rem;
+  min-height: 44px;
   width: 100%;
-  transition:
-    border-color var(--duration) var(--ease),
-    box-shadow var(--duration) var(--ease);
+  line-height: 1.4;
 }
-.t-input::placeholder {
-  color: var(--text-muted);
-}
-.t-input:focus {
-  outline: none;
+.t-input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 .t-input[aria-invalid="true"] {
   border-color: var(--error);
 }
-.t-input[aria-invalid="true"]:focus {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 18%, transparent);
-}
-.t-input:disabled {
-  background: var(--neutral-surface);
-  color: var(--text-muted);
-  cursor: not-allowed;
+select.t-input {
+  appearance: auto;
 }
 textarea.t-input {
-  min-height: 6.5rem;
+  min-height: 6rem;
   resize: vertical;
 }
-select.t-input {
-  appearance: none;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23a7c0e3' d='M6 8.5 1.5 4h9z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2rem;
-}
 
-/* Card -------------------------------------------------------- */
+/* Modal ------------------------------------------------------- */
+.t-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0;
+  background: color-mix(in srgb, #020812 72%, transparent);
+  backdrop-filter: blur(4px);
+}
+@media (min-width: 640px) {
+  .t-modal-backdrop {
+    align-items: center;
+    padding: 1rem;
+  }
+}
+.t-modal {
+  width: 100%;
+  max-width: 32rem;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 0.5rem);
+  overflow: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: var(--shadow-lg);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+@media (min-width: 640px) {
+  .t-modal {
+    border-radius: var(--radius);
+    max-height: calc(100dvh - 2rem);
+  }
+}
+.t-modal--lg { max-width: 42rem; }
+.t-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.t-modal__title { font-size: 1rem; font-weight: 600; margin: 0; }
+.t-modal__body { padding: 1rem; }
+.t-modal__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--border);
+}
+.t-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.t-icon-btn:hover { background: var(--neutral-surface); color: var(--text); }
+.t-icon-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Cards ------------------------------------------------------- */
 .t-card {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  font-family: var(--font-sans);
 }
-.t-card--pad {
-  padding: 1.25rem;
-}
+.t-card--pad { padding: 1rem; }
+@media (min-width: 640px) { .t-card--pad { padding: 1.25rem; } }
 .t-card__header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
   border-bottom: 1px solid var(--border);
 }
-.t-card__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text);
-  margin: 0;
-}
-.t-card__body {
-  padding: 1.25rem;
-}
-
+.t-card__title { font-size: 0.9375rem; font-weight: 600; margin: 0; }
+.t-card__body { padding: 1rem; }
 /* Status pill ------------------------------------------------- */
 .t-pill {
   display: inline-flex;
@@ -329,89 +375,6 @@ select.t-input {
   border-color: color-mix(in srgb, var(--error) 18%, transparent);
 }
 
-/* Modal ------------------------------------------------------- */
-.t-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgb(0 0 0 / 0.44);
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  z-index: 50;
-  animation: t-fade var(--duration) var(--ease);
-}
-.t-modal {
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-lg);
-  width: min(100%, 32rem);
-  max-height: min(85vh, 48rem);
-  display: flex;
-  flex-direction: column;
-  font-family: var(--font-sans);
-  animation: t-rise var(--duration) var(--ease);
-}
-.t-modal--lg {
-  width: min(100%, 48rem);
-}
-.t-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.125rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-}
-.t-modal__title {
-  font-size: 1.0625rem;
-  font-weight: 600;
-  margin: 0;
-  color: var(--text);
-}
-.t-modal__body {
-  padding: 1.25rem;
-  overflow-y: auto;
-}
-.t-modal__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.625rem;
-  padding: 1rem 1.25rem;
-  border-top: 1px solid var(--border);
-}
-.t-icon-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color 160ms var(--ease);
-}
-.t-icon-btn:hover {
-  background: var(--neutral-surface);
-  color: var(--text);
-}
-.t-icon-btn:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-@keyframes t-fade {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes t-rise {
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.985);
-  }
-}
 
 /* Toast ------------------------------------------------------- */
 .t-toast-viewport {

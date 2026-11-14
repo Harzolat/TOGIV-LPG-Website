@@ -200,6 +200,35 @@ void REFILL;
 void COMPLAINT;
 void ENQUIRY;
 
+/**
+ * The next normal staff step for a request — powers the admin queue's
+ * one-click "advance" action. Exceptional moves (reject, escalate, cancel)
+ * are never returned: those need a reason and belong on the detail screen.
+ */
+const NEXT_PRIORITY: readonly RequestStatus[] = [
+  "Received",
+  "UnderReview",
+  "Accepted",
+  "Processing",
+  "Dispatched",
+  "Completed",
+  "Resolved",
+];
+
+export function nextStaffStep(
+  type: RequestType,
+  from: RequestStatus,
+): { to: RequestStatus; reasonRequired: boolean } | null {
+  const rows = ALLOWED[type][from] ?? [];
+  for (const to of NEXT_PRIORITY) {
+    const row = rows.find(
+      (r) => r.to === to && (r.actor === "staff" || r.actor === "any"),
+    );
+    if (row) return { to, reasonRequired: row.reason === "required" };
+  }
+  return null;
+}
+
 export function isTerminal(type: RequestType, status: RequestStatus): boolean {
   return TERMINAL[type].includes(status);
 }

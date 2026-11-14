@@ -34,7 +34,9 @@ async function main(): Promise<void> {
 
   const phone = process.env.SEED_SUPER_ADMIN_PHONE;
   const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
-  const email = process.env.SEED_SUPER_ADMIN_EMAIL;
+  // Emails are one-per-account and case-insensitive (lower(email) unique
+  // index); normalise the operator-supplied value before it is written.
+  const email = process.env.SEED_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
 
   if (phone && password) {
     let normalized: string;

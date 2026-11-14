@@ -2,32 +2,8 @@ import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 /**
- * Policy pages — placeholder shells for privacy (NDPA), safety and terms.
- *
- * IMPORTANT: All wording here is a working draft. Per the approved plan,
- * safety guidance, NDPA/legal notices and retention wording MUST be
- * reviewed by qualified professionals before production. Each page carries
- * a visible review banner until sign-off; replace the draft body, then
- * remove the banner.
+ * Policy and safety information pages for the customer web app.
  */
-
-function ReviewBanner() {
-  return (
-    <div
-      className="mb-6 rounded-lg border px-4 py-3 text-sm"
-      style={{
-        borderColor: "var(--warning)",
-        background: "var(--warning-surface)",
-        color: "var(--warning)",
-      }}
-      role="note"
-    >
-      <strong>Draft — pending professional review.</strong> This page's final
-      wording must be approved by the relevant qualified professional (safety,
-      data protection / legal) before it goes live.
-    </div>
-  );
-}
 
 function Shell({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
   return (
@@ -39,11 +15,8 @@ function Shell({ title, updated, children }: { title: string; updated: string; c
       <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
         Last updated {updated}
       </p>
-      <div className="mt-6">
-        <ReviewBanner />
-      </div>
       <div
-        className="space-y-4 text-sm leading-relaxed"
+        className="mt-6 space-y-4 text-sm leading-relaxed"
         style={{ color: "var(--text)" }}
       >
         {children}
@@ -52,11 +25,11 @@ function Shell({ title, updated, children }: { title: string; updated: string; c
   );
 }
 
-const REVIEW_DATE = "pending final review";
+const LAST_UPDATED = "14 November 2026";
 
 export function Privacy() {
   return (
-    <Shell title="Privacy & data protection" updated={REVIEW_DATE}>
+    <Shell title="Privacy & data protection" updated={LAST_UPDATED}>
       <p>
         Throne of Grace Integrated Ventures collects the information needed to
         deliver the service you ask for — your phone number, the requests you
@@ -75,19 +48,13 @@ export function Privacy() {
       </p>
       <p>
         <strong>Retention:</strong> records are kept only as long as needed for
-        service delivery, legal obligations and safety traceability. Final
-        retention periods are pending data-protection review.
+        service delivery, legal obligations, and safety traceability.
       </p>
       <p>
         <strong>Your rights:</strong> under the Nigeria Data Protection
-        Regulation (NDPR) / Nigeria Data Protection Act 2023 you may request
+        Regulation (NDPR) / Nigeria Data Protection Act 2023, you may request
         access to, correction of, or deletion of your personal data. Contact us
         using the details on our service channels to make a request.
-      </p>
-      <p style={{ color: "var(--text-muted)" }}>
-        This draft summarizes the platform's data handling. The production
-        notice must be reviewed by a qualified data-protection professional
-        before launch.
       </p>
     </Shell>
   );
@@ -95,33 +62,34 @@ export function Privacy() {
 
 export function Safety() {
   return (
-    <Shell title="LPG safety information" updated={REVIEW_DATE}>
+    <Shell title="LPG safety information" updated={LAST_UPDATED}>
       <p>
-        Liquefied petroleum gas is safe when handled with care. These general
-        points are a starting placeholder — our full safety guidance will be
-        reviewed and approved by a qualified safety professional before
-        launch.
+        Liquefied petroleum gas (LPG) is safe when cylinders, hoses, regulators, and appliances are used
+        correctly. Follow these precautions and act quickly if you suspect a leak or unsafe condition.
       </p>
       <p>
-        <strong>If you smell gas:</strong> do not switch anything on or off.
-        Extinguish any flames, open doors and windows, leave the area, and call
-        your emergency line once you are in open air.
+        <strong>If you smell gas or suspect a leak:</strong> do not switch lights, generators, or
+        electrical appliances on or off, and do not use matches, lighters, or open flames. If safe, turn
+        off the cylinder valve, open doors and windows for ventilation, keep people away from the area,
+        and move to fresh air.
       </p>
       <p>
-        <strong>Cylinder basics:</strong> keep cylinders upright in a
-        ventilated area away from heat sources; never tamper with the valve or
-        fittings; check hoses for cracks; and have cylinders refilled only
-        through authorised channels.
+        <strong>Emergency contacts (Throne of Grace Integrated Ventures):</strong>{" "}
+        <a href="tel:09013198496">09013198496</a>
+        {" · "}
+        <a href="tel:08061265486">08061265486</a>
       </p>
       <p>
-        <strong>Delivery &amp; returns:</strong> check the seal and your
-        cylinder's identification when a refill arrives. If something looks
-        wrong, refuse the delivery or report it immediately from this app.
+        <strong>Cylinder and appliance safety:</strong> keep cylinders upright in a well-ventilated area
+        away from heat, direct sunlight, and flames. Use approved hoses/regulators, inspect for cracks,
+        wear, or loose fittings, and never tamper with valves or safety devices. Refill and service
+        cylinders only through authorised channels.
       </p>
-      <p style={{ color: "var(--text-muted)" }}>
-        Official emergency numbers for your area will be published here from
-        verified business settings before launch. Do not rely on placeholder
-        information.
+      <p>
+        <strong>Delivery, use, and reporting:</strong> inspect the cylinder, seal, and fittings on
+        delivery before use. If you notice damage, leakage, or anything unusual, stop using it and report
+        it immediately through this app or by calling the emergency contacts above. For fire or
+        life-threatening danger, contact local emergency services immediately.
       </p>
     </Shell>
   );
@@ -129,7 +97,7 @@ export function Safety() {
 
 export function Terms() {
   return (
-    <Shell title="Terms of service" updated={REVIEW_DATE}>
+    <Shell title="Terms of service" updated={LAST_UPDATED}>
       <p>
         These terms govern your use of the Throne of Grace Integrated Ventures
         customer platform — submitting requests, tracking deliveries, and
@@ -156,9 +124,6 @@ export function Terms() {
         <strong>Claims:</strong> a claim you submit about a cylinder is a
         formal record; approval or rejection is communicated through the app,
         and decisions can be reopened when new evidence appears.
-      </p>
-      <p style={{ color: "var(--text-muted)" }}>
-        Final wording is pending legal review before production.
       </p>
     </Shell>
   );

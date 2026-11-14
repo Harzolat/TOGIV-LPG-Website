@@ -196,6 +196,7 @@ export class RequestsController {
         reference: true,
         type: true,
         status: true,
+        deliveryMethod: true,
         contactPhone: true,
         createdAt: true,
         updatedAt: true,
@@ -233,6 +234,14 @@ export class RequestsController {
         },
         address: true,
         customer: { select: { id: true, fullName: true } },
+        cylinder: {
+          select: {
+            id: true,
+            serial: true,
+            label: true,
+            cylinderType: { select: { capacityKg: true, label: true } },
+          },
+        },
       },
     });
     if (!request || request.deletedAt) throw new NotFoundException("Request not found.");
@@ -246,11 +255,23 @@ export class RequestsController {
       }
     }
 
+    const {
+      paymentStatus: _paymentStatus,
+      paymentMethod: _paymentMethod,
+      paymentAmountKobo: _paymentAmountKobo,
+      paymentReference: _paymentReference,
+      paymentNote: _paymentNote,
+      paymentConfirmedAt: _paymentConfirmedAt,
+      paymentConfirmedById: _paymentConfirmedById,
+      ...safeRequest
+    } = request as typeof request & Record<string, unknown>;
+
     return {
-      ...request,
+      ...safeRequest,
       messages: request.messages.filter((m) => staff || !m.internal),
-      // Customers never receive: linkedByUserId internals or contactPhone of others
-      contactPhone: undefined,
+      // Staff need the contact number to coordinate the refill; customers
+      // already know it and the API must not leak it on public surfaces.
+      contactPhone: staff ? request.contactPhone : undefined,
     };
   }
 

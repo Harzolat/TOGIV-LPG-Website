@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import type { LinkCandidate, RequestListItem } from "../lib/types";
+import { usePolling } from "../lib/usePolling";
+import type { LinkCandidate, RequestListItem, RequestStatus } from "../lib/types";
 import { useAuth } from "../lib/auth";
 import { Button, Card, EmptyState, ErrorState, Skeleton, StatusPill } from "@togi/ui";
-
-/**
- * My requests — authenticated dashboard:
- * - request list (newest first) with status pills
- * - confirmation-required guest linking (v1.2 §1.4.2): candidates found by
- *   phone are NEVER auto-linked; the customer picks and confirms
- */
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+
+function statusText(status: RequestStatus, deliveryMethod?: string | null): string {
+  if (deliveryMethod === "home" && status === "Dispatched") return "Team en route";
+  return status.replace(/([a-z])([A-Z])/g, "$1 $2");
+}
+
+const ACTIVE: RequestStatus[] = [
+  "Submitted",
+  "Received",
+  "UnderReview",
+  "Accepted",
+  "Processing",
+  "Dispatched",
+  "Escalated",
+];
 
 export default function Account() {
   const { user } = useAuth();
@@ -28,28 +37,36 @@ export default function Account() {
   const [linkDone, setLinkDone] = useState(false);
 
   const load = useCallback(async () => {
-    setError(null);
     try {
       const res = await api<{ requests: RequestListItem[] }>("/requests/mine");
       setItems(res.requests);
+      setError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not load your requests.");
+      if (items === null) {
+        setError(err instanceof ApiError ? err.message : "Could not load your requests.");
+      }
     }
-  }, []);
+  }, [items]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  usePolling(load, { intervalMs: 12_000 });
 
-  // One-time candidate check: only if the account has no requests yet —
-  // that's the moment a freshly registered customer has guest history.
   useEffect(() => {
     if (items && items.length === 0 && !linkDone) {
       api<{ candidates: LinkCandidate[] }>("/requests/link/candidates", { method: "POST" })
         .then((res) => setCandidates(res.candidates))
-        .catch(() => setCandidates([])); // silent: linking is optional
+        .catch(() => setCandidates([]));
     }
   }, [items, linkDone]);
+
+  const sorted = useMemo(() => {
+    const list = [...(items ?? [])];
+    list.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+    return list;
+  }, [items]);
+
+  const active = useMemo(() => sorted.filter((r) => ACTIVE.includes(r.status)), [sorted]);
+  const closed = useMemo(() => sorted.filter((r) => !ACTIVE.includes(r.status)), [sorted]);
+  const featured = active[0] ?? null;
 
   async function confirmLink() {
     if (selected.size === 0) return;
@@ -71,26 +88,27 @@ export default function Account() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="flex items-end justify-between gap-4">
+    <div className="mx-auto max-w-3xl anim-enter">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">My requests</h1>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Welcome{user?.profile?.fullName ? `, ${user.profile.fullName}` : ""}
+          </p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">My requests</h1>
           <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-            Signed in as {user?.phone}
+            Signed in as {user?.phone || "your account"}
           </p>
         </div>
-        <Link to="/request" className="t-btn t-btn--primary t-btn--md">
-          New request
+        <Link to="/request" className="t-btn t-btn--primary t-btn--md w-full sm:w-auto">
+          New refill request
         </Link>
       </div>
 
-      {/* Guest-history linking — confirmation required, never silent */}
       {candidates && candidates.length > 0 ? (
         <Card className="mt-6" padded title="Requests made before you registered?">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            We found {candidates.length} request
-            {candidates.length === 1 ? "" : "s"} submitted with your number as a guest.
-            Select the ones that are yours to add them to your account.
+            We found {candidates.length} request{candidates.length === 1 ? "" : "s"} submitted with your number as a guest.
+            Select the ones that are yours to add them to your account. We never link requests automatically.
           </p>
           <ul className="mt-4 space-y-2">
             {candidates.map((c) => (
@@ -109,7 +127,7 @@ export default function Account() {
                       setSelected(next);
                     }}
                   />
-                  <span className="flex-1">
+                  <span className="min-w-0 flex-1">
                     <span className="block font-mono text-sm font-medium">{c.reference}</span>
                     <span className="text-xs" style={{ color: "var(--text-muted)" }}>
                       {c.type} · submitted {formatDate(c.createdAt)}
@@ -125,7 +143,7 @@ export default function Account() {
               {linkError}
             </p>
           ) : null}
-          <div className="mt-4 flex items-center justify-end gap-3">
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
             <Button variant="ghost" onClick={() => setCandidates(null)} disabled={linking}>
               Not now
             </Button>
@@ -137,7 +155,7 @@ export default function Account() {
       ) : null}
 
       <div className="mt-8">
-        {error ? (
+        {error && items === null ? (
           <ErrorState
             title="Couldn't load your requests"
             description={error}
@@ -150,13 +168,13 @@ export default function Account() {
         ) : items === null ? (
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <Skeleton key={i} height="4.5rem" />
+              <Skeleton key={i} height="5rem" />
             ))}
           </div>
         ) : items.length === 0 ? (
           <EmptyState
             title="No requests yet"
-            description="When you submit a refill, complaint or enquiry it will appear here with live status."
+            description="Place your first refill request and track its progress here."
             action={
               <Link to="/request" className="t-btn t-btn--primary t-btn--md">
                 Submit your first request
@@ -164,30 +182,92 @@ export default function Account() {
             }
           />
         ) : (
-          <ul className="space-y-3">
-            {items.map((r) => (
-              <li key={r.id}>
-                <Link
-                  to={`/account/requests/${r.id}`}
-                  className="t-card t-lift flex items-center justify-between gap-4 p-4"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate font-mono text-sm font-semibold">{r.reference}</span>
-                    <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-                      {r.type}
-                      {r.deliveryMethod === "home"
-                        ? " · home delivery"
-                        : r.deliveryMethod === "station"
-                          ? " · station pick-up"
-                          : ""}{" "}
-                      · {formatDate(r.createdAt)}
-                    </span>
+          <div className="space-y-6">
+            {featured ? (
+              <section aria-labelledby="active-heading">
+                <h2 id="active-heading" className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                  Active request
+                </h2>
+                <Link to={`/account/requests/${featured.id}`} className="t-card t-lift block p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-base font-semibold">{featured.reference}</p>
+                      <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+                        {featured.type === "refill" ? "Refill" : featured.type}
+                        {featured.deliveryMethod === "home"
+                          ? " · On-site refill"
+                          : featured.deliveryMethod === "station"
+                            ? " · Station refill"
+                            : ""}
+                      </p>
+                      <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+                        Submitted {formatDate(featured.createdAt)} · Updated {formatDate(featured.updatedAt || featured.createdAt)}
+                      </p>
+                    </div>
+                    <StatusPill
+                      status={featured.status}
+                      label={statusText(featured.status, featured.deliveryMethod)}
+                    />
+                  </div>
+                  <span className="mt-4 inline-flex min-h-[44px] items-center text-sm font-medium" style={{ color: "var(--primary)" }}>
+                    View details →
                   </span>
-                  <StatusPill status={r.status} />
                 </Link>
-              </li>
-            ))}
-          </ul>
+
+                {active.length > 1 ? (
+                  <div className="mt-4">
+                    <h3 className="mb-2 text-sm font-medium" style={{ color: "var(--text-muted)" }}>
+                      Other active requests
+                    </h3>
+                    <ul className="space-y-2">
+                      {active.slice(1).map((r) => (
+                        <li key={r.id}>
+                          <Link
+                            to={`/account/requests/${r.id}`}
+                            className="t-card t-lift flex items-center justify-between gap-3 p-3 sm:p-4"
+                          >
+                            <span className="min-w-0">
+                              <span className="block font-mono text-sm font-semibold">{r.reference}</span>
+                              <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                                Updated {formatDate(r.updatedAt || r.createdAt)}
+                              </span>
+                            </span>
+                            <StatusPill status={r.status} label={statusText(r.status, r.deliveryMethod)} />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {closed.length > 0 ? (
+              <section aria-labelledby="history-heading">
+                <h2 id="history-heading" className="mb-3 text-sm font-semibold uppercase tracking-wide" style={{ color: "var(--text-muted)" }}>
+                  Request history
+                </h2>
+                <ul className="space-y-2">
+                  {closed.map((r) => (
+                    <li key={r.id}>
+                      <Link
+                        to={`/account/requests/${r.id}`}
+                        className="t-card t-lift flex items-center justify-between gap-3 p-3 sm:p-4"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-mono text-sm font-semibold">{r.reference}</span>
+                          <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                            {r.type === "refill" ? "Refill" : r.type} · {formatDate(r.updatedAt || r.createdAt)}
+                          </span>
+                        </span>
+                        <StatusPill status={r.status} label={statusText(r.status, r.deliveryMethod)} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+          </div>
         )}
       </div>
     </div>
