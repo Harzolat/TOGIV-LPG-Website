@@ -1,0 +1,17 @@
+
+{
+  "rewrites": [
+    {
+      "source": "/api/v1",
+      "destination": "https://throne-of-grace-api.onrender.com/api/v1"
+    },
+    {
+      "source": "/api/v1/:path*",
+      "destination": "https://throne-of-grace-api.onrender.com/api/v1/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/"
+    }
+  ]
+}
