@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
+import { useAuth } from "../lib/auth";
 import { usePolling } from "../lib/usePolling";
 import { Button, Card, ErrorState, Skeleton, StatusPill, useToast } from "@togi/ui";
 import type { CustomerDetail as CustomerDetailPayload } from "@togi/shared";
@@ -32,6 +33,7 @@ export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [data, setData] = useState<CustomerDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -109,6 +111,14 @@ export default function CustomerDetail() {
                 <span className="text-xs" style={{ color: "var(--error)" }}>
                   Suspended {formatDate(data.suspendedAt)}
                 </span>
+              ) : null}
+              {user?.roles.some((r) => r === "admin" || r === "super_admin") ? (
+                <Link
+                  to={`/recovery?customer=${data.id}`}
+                  className="t-btn t-btn--secondary t-btn--sm"
+                >
+                  Reset PIN
+                </Link>
               ) : null}
               <Button variant="danger" size="sm" loading={deleting} onClick={() => void removeCustomer()}>
                 Delete customer

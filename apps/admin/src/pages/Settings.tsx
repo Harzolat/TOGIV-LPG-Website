@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Bell, BellOff } from "lucide-react";
 import { Button, Card, EmptyState, ErrorState, Skeleton, useToast } from "@togi/ui";
 import type { StaffMember } from "@togi/shared";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
+import { disablePush, enablePush, getPushPermission, isPushSupported, syncPushState } from "../lib/push";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
@@ -28,6 +30,17 @@ export default function Settings() {
   const [staffError, setStaffError] = useState<string | null>(null);
   const [staffLoading, setStaffLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushState, setPushState] = useState<{
+    supported: boolean;
+    permission: NotificationPermission | "unsupported";
+    subscribed: boolean;
+  }>({ supported: isPushSupported(), permission: getPushPermission(), subscribed: false });
 
   const isSuperAdmin = useMemo(() => Boolean(user?.roles?.includes("super_admin")), [user?.roles]);
 
@@ -56,6 +69,62 @@ export default function Settings() {
     void loadStaff();
   }, [loadStaff]);
 
+  const refreshPush = useCallback(async () => {
+    try {
+      setPushState(await syncPushState());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPush();
+  }, [refreshPush]);
+
+  async function onEnablePush() {
+    setPushBusy(true);
+    try {
+      const res = await enablePush();
+      await refreshPush();
+      toast({
+        message:
+          res.message ??
+          (res.ok ? "Browser notifications enabled." : "Could not enable browser notifications."),
+        tone: res.ok ? "success" : "error",
+      });
+    } catch (e) {
+      await refreshPush();
+      toast({
+        message: e instanceof Error ? e.message : "Could not enable browser notifications.",
+        tone: "error",
+      });
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function onDisablePush() {
+    setPushBusy(true);
+    try {
+      const res = await disablePush();
+      await refreshPush();
+      toast({
+        message:
+          res.message ??
+          (res.ok ? "Browser notifications disabled." : "Could not disable browser notifications."),
+        tone: res.ok ? "success" : "error",
+      });
+    } catch (e) {
+      await refreshPush();
+      toast({
+        message: e instanceof Error ? e.message : "Could not disable browser notifications.",
+        tone: "error",
+      });
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
@@ -78,6 +147,47 @@ export default function Settings() {
       });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (changingPassword) return;
+    if (
+      newPassword.length < 8 ||
+      !/[a-zA-Z]/.test(newPassword) ||
+      !/[0-9]/.test(newPassword)
+    ) {
+      toast({
+        message: "Use at least 8 characters, including a letter and a number.",
+        tone: "error",
+      });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast({ message: "New password confirmation does not match.", tone: "error" });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await api("/auth/staff/password", {
+        method: "POST",
+        body: { currentPassword, newPassword },
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      toast({
+        message: "Password changed. Other devices have been signed out.",
+        tone: "success",
+      });
+    } catch (err) {
+      toast({
+        message: err instanceof ApiError ? err.message : "Could not change password.",
+        tone: "error",
+      });
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -206,6 +316,101 @@ export default function Settings() {
           </div>
         </Card>
       ) : null}
+
+      <Card className="mt-5" padded title="Browser notifications">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Receive browser push alerts for new refill requests and key operational updates on this device.
+        </p>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" style={{ borderColor: "var(--border)" }}>
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              {pushState.subscribed ? <Bell size={16} /> : <BellOff size={16} />}
+              {pushState.subscribed ? "Notifications enabled" : "Enable notifications"}
+            </p>
+            <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
+              {!pushState.supported
+                ? "This browser/device does not support push notifications."
+                : pushState.permission === "denied"
+                  ? "Notifications are blocked in browser settings for this site."
+                  : pushState.subscribed
+                    ? "Browser push is active on this browser. You can disable it here; in-app notifications remain available."
+                    : pushState.permission === "granted"
+                      ? "Browser permission is granted, but notifications have not yet been activated on this browser."
+                      : "Enable notifications when you want alerts (permission will be requested by your browser)."}
+            </p>
+          </div>
+          <div>
+            {pushState.supported && pushState.permission !== "denied" ? (
+              pushState.subscribed ? (
+                <Button variant="secondary" size="sm" loading={pushBusy} onClick={() => void onDisablePush()}>
+                  Disable notifications
+                </Button>
+              ) : (
+                <Button size="sm" loading={pushBusy} onClick={() => void onEnablePush()}>
+                  Enable notifications
+                </Button>
+              )
+            ) : null}
+          </div>
+        </div>
+      </Card>
+
+      <Card className="mt-5" padded title="Change password">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          After an operator-issued temporary password, set your own password
+          here. Your authenticator stays enrolled and is still required at
+          sign-in. Other signed-in devices are signed out.
+        </p>
+        <form onSubmit={changePassword} className="mt-4 space-y-4">
+          <label className="block text-sm">
+            <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+              Current password
+            </span>
+            <input
+              className="t-input w-full"
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+              New password
+            </span>
+            <input
+              className="t-input w-full"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={8}
+              required
+              placeholder="At least 8 characters, with a letter and a number"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+              Confirm new password
+            </span>
+            <input
+              className="t-input w-full"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={8}
+              required
+            />
+          </label>
+          <div className="pt-1">
+            <Button type="submit" loading={changingPassword}>
+              Change password
+            </Button>
+          </div>
+        </form>
+      </Card>
 
       <Card className="mt-5" padded title="Edit profile">
         <form onSubmit={saveProfile} className="space-y-4">

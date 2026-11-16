@@ -32,6 +32,29 @@ async function main(): Promise<void> {
   await seedRbac(prisma);
   console.log("RBAC matrix seeded (roles + permissions, idempotent).");
 
+  // Business contact configuration for the recovery pages. The migration
+  // seeds the already-published numbers; these env vars let a new
+  // environment provision the same row without a code change. Existing
+  // operator-edited values are never overwritten.
+  const contactPhone = process.env.BUSINESS_CONTACT_PHONE?.trim();
+  if (contactPhone) {
+    await prisma.businessSetting.upsert({
+      where: { key: "company.contact" },
+      update: {},
+      create: {
+        key: "company.contact",
+        value: {
+          company:
+            process.env.BUSINESS_CONTACT_COMPANY?.trim() ??
+            "Throne of Grace Integrated Ventures",
+          phone: contactPhone,
+          altPhone: process.env.BUSINESS_CONTACT_PHONE_ALT?.trim() ?? null,
+        },
+      },
+    });
+    console.log("Business recovery contact configuration present.");
+  }
+
   const phone = process.env.SEED_SUPER_ADMIN_PHONE;
   const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
   // Emails are one-per-account and case-insensitive (lower(email) unique

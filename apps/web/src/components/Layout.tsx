@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ArrowRight, User } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import NotificationsBell from "./NotificationsBell";
 
 /**
  * Customer app shell — premium/minimalist direction, brand palette
@@ -14,18 +15,32 @@ import { useAuth } from "../lib/auth";
 
 function Wordmark() {
   return (
-    <Link to="/" className="group inline-flex min-w-0 flex-col leading-none" aria-label="Throne of Grace Integrated Ventures — home">
-      <span
-        className="truncate text-[0.78rem] font-semibold tracking-[0.12em] sm:text-[0.9375rem] sm:tracking-[0.14em]"
-        style={{ color: "var(--text)" }}
-      >
-        THRONE OF GRACE
-      </span>
-      <span
-        className="mt-0.5 truncate text-[0.58rem] uppercase tracking-[0.16em] transition-opacity duration-200 group-hover:opacity-80 sm:text-[0.6875rem] sm:tracking-[0.22em]"
-        style={{ color: "var(--primary)" }}
-      >
-        Integrated Ventures
+    <Link
+      to="/"
+      className="group inline-flex min-w-0 shrink items-center gap-1 sm:gap-1.5"
+      aria-label="Throne of Grace Integrated Ventures — home"
+    >
+      <img
+        src="/brand/togiv-white-logo.png"
+        alt=""
+        aria-hidden="true"
+        className="block h-auto max-h-8 w-auto max-w-[56px] shrink-0 sm:max-h-10 sm:max-w-[68px]"
+        style={{ objectFit: "contain" }}
+        decoding="async"
+      />
+      <span className="inline-flex min-w-0 flex-col leading-none">
+        <span
+          className="truncate text-[0.78rem] font-semibold tracking-[0.12em] sm:text-[0.9375rem] sm:tracking-[0.14em]"
+          style={{ color: "var(--text)" }}
+        >
+          THRONE OF GRACE
+        </span>
+        <span
+          className="mt-0.5 truncate text-[0.58rem] uppercase tracking-[0.16em] transition-opacity duration-200 group-hover:opacity-80 sm:text-[0.6875rem] sm:tracking-[0.22em]"
+          style={{ color: "var(--primary)" }}
+        >
+          Integrated Ventures
+        </span>
       </span>
     </Link>
   );
@@ -83,6 +98,7 @@ export default function Layout() {
               </span>
             ) : user ? (
               <>
+                <NotificationsBell />
                 <NavLink
                   to="/account"
                   className={({ isActive }) => `${navLinkClass({ isActive })} min-h-[44px] inline-flex items-center`}
@@ -176,10 +192,17 @@ export default function Layout() {
       <footer className="border-t" style={{ borderColor: "var(--border)", background: "var(--surface)" }}>
         <div className="mx-auto grid max-w-5xl gap-8 px-5 py-10 sm:grid-cols-3">
           <div>
-            <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-              Throne of Grace Integrated Ventures
-            </p>
-            <p className="mt-2 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
+            <Link to="/" className="inline-flex" aria-label="Throne of Grace Integrated Ventures — home">
+              <img
+                src="/brand/logo-full.png"
+                alt="Throne of Grace Integrated Ventures"
+                className="h-10 w-auto max-w-[220px]"
+                style={{ objectFit: "contain" }}
+                loading="lazy"
+                decoding="async"
+              />
+            </Link>
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: "var(--text-muted)" }}>
               LPG customer service &amp; operations. Cylinder refills, deliveries and
               support requests — tracked from submission to completion.
             </p>

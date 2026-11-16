@@ -99,6 +99,20 @@ export default function Auth({ mode }: Props) {
 
   return (
     <div className="mx-auto max-w-md anim-enter">
+      <div className="mb-6 flex justify-center">
+        <Link
+          to="/"
+          aria-label="TOGIV — home"
+          className="inline-flex"
+        >
+          <span
+            className="text-xl font-semibold tracking-[0.14em] sm:text-2xl"
+            style={{ color: "var(--text)" }}
+          >
+            TOGIV
+          </span>
+        </Link>
+      </div>
       <div className="t-card t-card--pad shadow-sm">
         <h1 className="text-xl font-semibold tracking-tight">
           {isRegister ? "Create your account" : "Sign in"}
@@ -184,11 +198,7 @@ export default function Auth({ mode }: Props) {
           </Button>
         </form>
 
-        {!isRegister ? (
-          <p className="mt-4 text-sm" style={{ color: "var(--text-muted)" }}>
-            Need help accessing your account? Please contact support for assistance.
-          </p>
-        ) : null}
+
       </div>
 
       <p className="mt-5 text-center text-sm" style={{ color: "var(--text-muted)" }}>

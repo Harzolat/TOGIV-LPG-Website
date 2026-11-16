@@ -10,6 +10,7 @@ import {
   parentEffectFor,
   validateTransition,
 } from "@togi/shared";
+import { NotificationEventsService } from "../notifications/notification-events.service";
 
 /**
  * Delivery service — v1.2.4 Part 4.4 + §A1 (approved):
@@ -53,7 +54,10 @@ export interface DeliveryUpdateInput {
 
 @Injectable()
 export class DeliveryService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly notifications: NotificationEventsService,
+  ) {}
 
   /** Create the delivery for an accepted home-delivery refill (§4.4 created row). */
   async createForRequest(
@@ -77,7 +81,7 @@ export class DeliveryService {
       const delivery = await tx.delivery.create({
         data: { requestId, addressSnapshot, status: "AwaitingAssignment" },
       });
-      await tx.requestStatusHistory.create({
+      const history = await tx.requestStatusHistory.create({
         data: {
           requestId,
           fromStatus: request.status as never,
@@ -91,6 +95,15 @@ export class DeliveryService {
       await tx.serviceRequest.update({
         where: { id: requestId },
         data: { status: "Processing" },
+      });
+      await this.notifications.emitRequestStatusChanged(tx, {
+        requestId,
+        reference: request.reference,
+        fromStatus: request.status as string,
+        toStatus: "Processing",
+        historyId: history.id,
+        visibleToCustomer: true,
+        actorKind: "staff",
       });
       return delivery.id;
     });
@@ -236,7 +249,7 @@ export class DeliveryService {
               ...(effect.to === "Completed" ? { completedAt: new Date() } : {}),
             },
           });
-          await tx.requestStatusHistory.create({
+          const history = await tx.requestStatusHistory.create({
             data: {
               requestId: delivery.requestId,
               fromStatus: effect.from,
@@ -246,6 +259,15 @@ export class DeliveryService {
               note: `Delivery ${input.to}${input.failureReason ? ` (${input.failureReason})` : ""}`,
               visibleToCustomer: true,
             },
+          });
+          await this.notifications.emitRequestStatusChanged(tx, {
+            requestId: delivery.requestId,
+            reference: delivery.request.reference,
+            fromStatus: effect.from as string,
+            toStatus: effect.to as string,
+            historyId: history.id,
+            visibleToCustomer: true,
+            actorKind: "system",
           });
         }
 
@@ -258,20 +280,8 @@ export class DeliveryService {
             where: { id: delivery.requestId },
             data: { retryCount: failedCount },
           });
-          // Customer-visible failure note + follow-up task outbox
-          await tx.notificationOutbox.create({
-            data: {
-              eventType: "delivery.failed",
-              payload: {
-                requestId: delivery.requestId,
-                reference: delivery.request.reference,
-                reason: input.failureReason,
-                retryEligible: isRetryable && canRetry,
-              },
-              channel: "in_app",
-              dedupeKey: `delivery.failed:${input.deliveryId}:${delivery.version + 1}`,
-            },
-          });
+          // Legacy in_app outbox emission removed: customer/admin notifications
+          // are emitted from actual request status-history events above.
         }
       }
 

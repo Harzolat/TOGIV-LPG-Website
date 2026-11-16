@@ -52,13 +52,17 @@ model User {
   roles                  UserRole[]
   sessions               Session[]
   notifications          Notification[]
+  notificationPreferences NotificationPreference[]
+  pushSubscriptions      PushSubscription[]
   requestedReqs          ServiceRequest[]        @relation("RequestRequestedBy")
   auditLogs              AuditLog[]              @relation("AuditActor")
   authIdentities         CustomerAuthIdentity[]
   passkeyCredentials     PasskeyCredential[]
   emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens    PasswordResetToken[]
-  webauthnChallenges     WebAuthnChallenge[]
+  passwordResetTokens      PasswordResetToken[]
+  pinResetTokens           PinResetToken[]
+  staffPasswordResetTokens StaffPasswordResetToken[]
+  webauthnChallenges       WebAuthnChallenge[]
 
   @@index([kind, status])
 }
@@ -587,35 +591,102 @@ model DeliveryAssignment {
 // ───────────────────────────── Notifications ─────────────────────────────
 
 model Notification {
-  id        String    @id @default(uuid())
-  userId    String
-  type      String
-  title     String
-  body      String
-  data      Json?
-  readAt    DateTime?
-  createdAt DateTime  @default(now())
+  id                String    @id @default(uuid())
+  userId            String
+  recipientType     String    @default("customer") // customer | admin_owner
+  type              String
+  category          String    @default("legacy")
+  sourceEventKey    String // deterministic idempotency key; never empty (legacy rows backfilled in migration)
+  title             String
+  body              String
+  data              Json?
+  relatedEntityType String?
+  relatedEntityId   String?
+  actionUrl         String?
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outboxIntents NotificationOutbox[]
 
+  @@unique([userId, sourceEventKey])
+  @@index([userId, createdAt, id])
   @@index([userId, readAt, createdAt])
+  @@index([relatedEntityType, relatedEntityId])
 }
 
 // Transactional outbox: written in the same transaction as the business event.
+// Option B: post-cutover async delivery is for push/external channels; legacy in_app rows remain compatible.
 model NotificationOutbox {
-  id           String    @id @default(uuid())
-  eventType    String
-  payload      Json
-  channel      String // in_app | email | sms | whatsapp
-  status       String    @default("pending") // pending | sent | failed | dead
-  attempts     Int       @default(0)
-  nextAttemptAt DateTime @default(now())
-  providerRef  String?
-  dedupeKey    String    @unique // (entity, to_status, attempt) — duplicate protection
-  createdAt    DateTime  @default(now())
-  sentAt       DateTime?
+  id              String    @id @default(uuid())
+  notificationId  String? // linked persistent notification (nullable for legacy rows)
+  eventType       String
+  eventId         String? // deterministic business event identifier
+  channel         String // in_app | email | sms | whatsapp | push
+  recipientUserId String?
+  subscriptionId  String?
+  payload         Json
+  status          String    @default("pending") // pending | sending | sent | failed | dead
+  attempts        Int       @default(0)
+  maxAttempts     Int       @default(5)
+  nextAttemptAt   DateTime  @default(now())
+  lastAttemptAt   DateTime?
+  processedAt     DateTime?
+  providerRef     String?
+  lastError       String?
+  dedupeKey       String    @unique // deterministic delivery-intent dedupe key
+  createdAt       DateTime  @default(now())
+  sentAt          DateTime?
+
+  notification Notification?     @relation(fields: [notificationId], references: [id], onDelete: SetNull)
+  subscription PushSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   @@index([status, nextAttemptAt])
+  @@index([notificationId, channel])
+  @@index([recipientUserId, createdAt])
+  @@index([subscriptionId])
+}
+
+model NotificationPreference {
+  id          String   @id @default(uuid())
+  userId      String
+  userType    String // customer | admin
+  category    String
+  pushEnabled Boolean  @default(false) // explicit opt-in required
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@index([userId, userType])
+}
+
+model PushSubscription {
+  id                String    @id @default(uuid())
+  userId            String
+  userType          String // customer | admin
+  application       String // web | admin
+  endpoint          String    @unique
+  p256dh            String
+  auth              String
+  expirationTime    DateTime?
+  deviceLabel       String?
+  isActive          Boolean   @default(true)
+  lastSeenAt        DateTime?
+  lastSuccessAt     DateTime?
+  failureCount      Int       @default(0)
+  lastFailureAt     DateTime?
+  lastFailureReason String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  outboxIntents NotificationOutbox[]
+
+  @@index([userId, application, isActive])
+  @@index([userId, createdAt])
 }
 
 // ───────────────────────────── Reviews (schema now, UI Phase 3) ─────────────────────────────
@@ -741,6 +812,57 @@ model PasswordResetToken {
 
   @@index([userId, createdAt])
   @@index([expiresAt])
+}
+
+// Operator-authorized customer PIN reset tokens.
+//
+// A customer PIN is only reset after a staff member has verified identity
+// out-of-band and authorized the reset in the console. The raw token is
+// shown to the operator once, handed to the customer, and never persisted:
+// only its SHA-256 hash is stored. Tokens are single-use and short-lived.
+model PinResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique // SHA-256 of the 256-bit opaque token
+  expiresAt  DateTime
+  consumedAt DateTime?
+  revokedAt  DateTime?
+  createdBy  String? // staff User.id that authorized the reset
+  ip         String? // operator IP at authorization time (audit aid)
+  note       String? // how identity was verified (operator-entered)
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+// Operator-authorized staff password reset tokens.
+//
+// Issued only after manual identity verification (in-console by an authorized
+// operator, or via a server-side break-glass process as appropriate). The raw
+// token is shown once and never persisted: only its SHA-256 hash is stored.
+// Redeeming sets a new password chosen by the staff member while preserving
+// TOTP enrollment; all sessions are revoked. Single-use and short-lived.
+model StaffPasswordResetToken {
+  id         String    @id @default(uuid())
+  userId     String
+  tokenHash  String    @unique // SHA-256 of the 256-bit opaque token
+  expiresAt  DateTime
+  consumedAt DateTime?
+  revokedAt  DateTime?
+  createdBy  String? // staff User.id that authorized the reset (null for break-glass issuance if ever used)
+  ip         String? // operator IP at authorization time (audit aid)
+  note       String? // how identity was verified (operator-entered)
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@index([createdAt])
 }
 
 // Short-lived WebAuthn ceremony challenges (registration/authentication).

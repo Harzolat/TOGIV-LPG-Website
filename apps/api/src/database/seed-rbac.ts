@@ -17,6 +17,7 @@ const PERMISSIONS = [
   "customer:edit",
   "customer:suspend",
   "customer:export",
+  "customer:reset_pin",
   // requests
   "request:view_all",
   "request:view_scoped",
@@ -50,6 +51,7 @@ const ROLE_PERMISSIONS: Record<string, (typeof PERMISSIONS)[number][]> = {
     "customer:edit",
     "customer:suspend",
     "customer:export",
+    "customer:reset_pin",
     "request:view_all",
     "request:assign",
     "request:update_status",

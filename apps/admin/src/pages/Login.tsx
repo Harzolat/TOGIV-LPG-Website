@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button, TextInput } from "@togi/ui";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -27,19 +27,35 @@ type LoginResponse =
 
 function Wordmark() {
   return (
-    <div className="text-center leading-none">
-      <p
-        className="text-[0.9375rem] font-semibold tracking-[0.14em]"
-        style={{ color: "var(--text)" }}
+    <div className="flex justify-center">
+      <Link
+        to="/login"
+        aria-label="Throne of Grace Integrated Ventures — operations sign in"
+        className="inline-flex items-center gap-2 sm:gap-2.5"
       >
-        TOGIV OPERATIONS
-      </p>
-      <p
-        className="mt-1 text-[0.6875rem] tracking-[0.22em] uppercase"
-        style={{ color: "var(--primary)" }}
-      >
-        Integrated Ventures
-      </p>
+        <img
+          src="/brand/togiv-white-logo.png"
+          alt=""
+          aria-hidden="true"
+          className="block h-auto max-h-10 w-auto max-w-[64px] shrink-0 sm:max-h-12 sm:max-w-[76px]"
+          style={{ objectFit: "contain" }}
+          decoding="async"
+        />
+        <span className="inline-flex min-w-0 flex-col text-left leading-none">
+          <span
+            className="truncate text-[0.9375rem] font-semibold tracking-[0.14em]"
+            style={{ color: "var(--text)" }}
+          >
+            THRONE OF GRACE
+          </span>
+          <span
+            className="mt-1 truncate text-[0.6875rem] tracking-[0.22em] uppercase"
+            style={{ color: "var(--primary)" }}
+          >
+            INTEGRATED VENTURES
+          </span>
+        </span>
+      </Link>
     </div>
   );
 }
@@ -327,7 +343,7 @@ export default function Login() {
           </div>
 
           <p className="mt-6 text-center text-xs" style={{ color: "var(--text-muted)" }}>
-            Staff access only. Customers sign in with a one-time code on the main site.
+            Staff access only. For customer support, please use the main website.
           </p>
         </div>
       </main>

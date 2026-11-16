@@ -8,11 +8,15 @@ import { APP_GUARD } from "@nestjs/core";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { AdminController } from "./admin/admin.controller";
+import { AdminRecoveryController } from "./admin/recovery.controller";
 import { AdminStaffController } from "./admin/staff.controller";
 import { AuthController } from "./auth/auth.controller";
 import { AuthGuard } from "./auth/auth.guard";
 import { CustomerCredentialsController } from "./auth/customer-credentials.controller";
 import { LoginThrottle } from "./auth/login-throttle";
+import { RecoveryController } from "./auth/recovery.controller";
+import { RecoveryService } from "./auth/recovery.service";
+import { RecoveryThrottle } from "./auth/recovery-throttle";
 import { SessionService } from "./auth/session.service";
 import { StaffAuthController } from "./auth/staff.controller";
 import { ClaimService } from "./claims/claim.service";
@@ -26,7 +30,13 @@ import {
   createHealthPrismaClient,
   HEALTH_PRISMA,
 } from "./health/health.database";
+import { NotificationEventsService } from "./notifications/notification-events.service";
+import { NotificationService } from "./notifications/notification.service";
+import { NotificationsController } from "./notifications/notifications.controller";
 import { OutboxWorker } from "./notifications/outbox.worker";
+import { PushSubscriptionController } from "./notifications/push/push-subscription.controller";
+import { PushSubscriptionService } from "./notifications/push/push-subscription.service";
+import { WebPushService } from "./notifications/push/web-push.service";
 import { QrController } from "./qr/qr.controller";
 import { QrService } from "./qr/qr.service";
 import { RequestService } from "./requests/request.service";
@@ -59,15 +69,19 @@ const healthPrismaProvider = {
   controllers: [
     AuthController,
     CustomerCredentialsController,
+    RecoveryController,
     StaffAuthController,
     HealthController,
     AdminController,
+    AdminRecoveryController,
     AdminStaffController,
     QrController,
     RequestsController,
     ClaimsController,
     CylindersController,
     CustomersController,
+    NotificationsController,
+    PushSubscriptionController,
   ],
   providers: [
     prismaProvider,
@@ -75,8 +89,14 @@ const healthPrismaProvider = {
     { provide: APP_GUARD, useClass: AuthGuard },
     SessionService,
     LoginThrottle,
+    RecoveryThrottle,
+    RecoveryService,
     AuthGuard,
     QrService,
+    NotificationEventsService,
+    WebPushService,
+    PushSubscriptionService,
+    NotificationService,
     RequestService,
     ClaimService,
     DeliveryService,

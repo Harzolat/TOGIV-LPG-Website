@@ -1,6 +1,7 @@
 import { Controller, Delete, Get, NotFoundException, Param, Query } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { RequireAudience, RequirePermission } from "../auth/auth.guard";
+import { normalizeNgPhone } from "../common/phone";
 
 /**
  * Staff customer directory — read-only in Phase 1.
@@ -24,6 +25,17 @@ export class CustomersController {
   @RequirePermission("customer:view_all")
   async list(@Query("q") q?: string) {
     const term = q?.trim();
+    // Operators type phone numbers the local way (0803…) while numbers are
+    // stored as E.164 (+234803…). Normalise when possible so both forms
+    // find the same customer; names fall through unchanged.
+    const phoneTerm = (() => {
+      if (!term) return term;
+      try {
+        return normalizeNgPhone(term);
+      } catch {
+        return term;
+      }
+    })();
     const rows = await this.prisma.customerProfile.findMany({
       where: {
         user: { deletedAt: null },
@@ -31,7 +43,7 @@ export class CustomersController {
           ? {
               OR: [
                 { fullName: { contains: term, mode: "insensitive" as const } },
-                { user: { phone: { contains: term } } },
+                { user: { phone: { contains: phoneTerm } } },
               ],
             }
           : {}),

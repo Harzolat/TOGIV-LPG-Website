@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Bell, BellOff } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { usePolling } from "../lib/usePolling";
 import type { LinkCandidate, RequestListItem, RequestStatus } from "../lib/types";
 import { useAuth } from "../lib/auth";
+import { disablePush, enablePush, getPushPermission, isPushSupported, syncPushState } from "../lib/push";
 import { Button, Card, EmptyState, ErrorState, Skeleton, StatusPill } from "@togi/ui";
 
 function formatDate(iso: string): string {
@@ -11,7 +13,7 @@ function formatDate(iso: string): string {
 }
 
 function statusText(status: RequestStatus, deliveryMethod?: string | null): string {
-  if (deliveryMethod === "home" && status === "Dispatched") return "Team en route";
+  if (deliveryMethod === "home" && status === "Dispatched") return "Team on the way";
   return status.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
@@ -35,6 +37,13 @@ export default function Account() {
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkDone, setLinkDone] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
+  const [pushState, setPushState] = useState<{
+    supported: boolean;
+    permission: NotificationPermission | "unsupported";
+    subscribed: boolean;
+  }>({ supported: isPushSupported(), permission: getPushPermission(), subscribed: false });
 
   const load = useCallback(async () => {
     try {
@@ -57,6 +66,52 @@ export default function Account() {
         .catch(() => setCandidates([]));
     }
   }, [items, linkDone]);
+
+  const refreshPush = useCallback(async () => {
+    try {
+      setPushState(await syncPushState());
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPush();
+  }, [refreshPush]);
+
+  async function onEnablePush() {
+    setPushBusy(true);
+    setPushMsg(null);
+    try {
+      const res = await enablePush();
+      setPushMsg(
+        res.message ??
+          (res.ok ? "Browser notifications enabled." : "Could not enable browser notifications."),
+      );
+    } catch (e) {
+      setPushMsg(e instanceof Error ? e.message : "Could not enable browser notifications.");
+    } finally {
+      await refreshPush();
+      setPushBusy(false);
+    }
+  }
+
+  async function onDisablePush() {
+    setPushBusy(true);
+    setPushMsg(null);
+    try {
+      const res = await disablePush();
+      setPushMsg(
+        res.message ??
+          (res.ok ? "Browser notifications disabled." : "Could not disable browser notifications."),
+      );
+    } catch (e) {
+      setPushMsg(e instanceof Error ? e.message : "Could not disable browser notifications.");
+    } finally {
+      await refreshPush();
+      setPushBusy(false);
+    }
+  }
 
   const sorted = useMemo(() => {
     const list = [...(items ?? [])];
@@ -103,6 +158,42 @@ export default function Account() {
           New refill request
         </Link>
       </div>
+
+      <Card className="mt-6" padded title="Browser notifications">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              {pushState.subscribed ? <Bell size={16} /> : <BellOff size={16} />}
+              {pushState.subscribed ? "Notifications enabled" : "Enable notifications"}
+            </p>
+            <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
+              {!pushState.supported
+                ? "This browser/device does not support push notifications."
+                : pushState.permission === "denied"
+                  ? "Notifications are blocked in your browser settings for this site."
+                  : pushState.subscribed
+                    ? "Browser push is active on this browser. You'll receive alerts for request updates; in-app notifications remain available."
+                    : pushState.permission === "granted"
+                      ? "Browser permission is granted, but notifications have not yet been activated on this browser."
+                      : "Get alerts when your refill request is submitted, accepted, processed, dispatched, completed, or cancelled."}
+            </p>
+            {pushMsg ? <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{pushMsg}</p> : null}
+          </div>
+          <div>
+            {pushState.supported && pushState.permission !== "denied" ? (
+              pushState.subscribed ? (
+                <Button variant="secondary" size="sm" loading={pushBusy} onClick={() => void onDisablePush()}>
+                  Disable notifications
+                </Button>
+              ) : (
+                <Button size="sm" loading={pushBusy} onClick={() => void onEnablePush()}>
+                  Enable notifications
+                </Button>
+              )
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
       {candidates && candidates.length > 0 ? (
         <Card className="mt-6" padded title="Requests made before you registered?">

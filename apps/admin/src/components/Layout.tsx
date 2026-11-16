@@ -8,31 +8,47 @@ import {
   LogOut,
   Menu,
   X,
+  KeyRound,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
+import NotificationsBell from "./NotificationsBell";
 
 function Wordmark({ compact = false }: { compact?: boolean }) {
   return (
     <Link
       to="/overview"
-      className="group inline-flex flex-col leading-none"
+      className="group inline-flex min-w-0 items-center gap-2"
       aria-label="Throne of Grace — operations overview"
     >
-      <span
+      <img
+        src="/brand/togiv-white-logo.png"
+        alt=""
+        aria-hidden="true"
         className={
           compact
-            ? "text-[0.8125rem] font-semibold tracking-[0.14em]"
-            : "text-[0.9375rem] font-semibold tracking-[0.14em]"
+            ? "block h-auto max-h-7 w-auto max-w-[44px] shrink-0"
+            : "block h-auto max-h-9 w-auto max-w-[56px] shrink-0"
         }
-        style={{ color: "var(--text)" }}
-      >
-        THRONE OF GRACE
-      </span>
-      <span
-        className="mt-0.5 text-[0.625rem] tracking-[0.22em] uppercase"
-        style={{ color: "var(--primary)" }}
-      >
-        Refill operations
+        style={{ objectFit: "contain" }}
+        decoding="async"
+      />
+      <span className="inline-flex min-w-0 flex-col leading-none">
+        <span
+          className={
+            compact
+              ? "truncate text-[0.8125rem] font-semibold tracking-[0.14em]"
+              : "truncate text-[0.9375rem] font-semibold tracking-[0.14em]"
+          }
+          style={{ color: "var(--text)" }}
+        >
+          THRONE OF GRACE
+        </span>
+        <span
+          className="mt-0.5 truncate text-[0.625rem] tracking-[0.22em] uppercase"
+          style={{ color: "var(--primary)" }}
+        >
+          Refill operations
+        </span>
       </span>
     </Link>
   );
@@ -76,6 +92,8 @@ function NavGroups({
         <>
           <p className="admin-nav-section mt-2">Customers</p>
           <NavItem to="/customers" icon={Users} label="Customers" onNavigate={onNavigate} />
+          <p className="admin-nav-section mt-2">Security</p>
+          <NavItem to="/recovery" icon={KeyRound} label="Recovery" onNavigate={onNavigate} />
         </>
       ) : null}
 
@@ -119,6 +137,7 @@ export default function Layout() {
     if (p.startsWith("/requests/")) return "Order details";
     if (p.startsWith("/customers/")) return "Customer details";
     if (p.startsWith("/customers")) return "Customers";
+    if (p.startsWith("/recovery")) return "Recovery";
     if (p.startsWith("/team")) return "Account";
     if (p.startsWith("/settings")) return "Settings";
     return "Operations";
@@ -204,6 +223,7 @@ export default function Layout() {
               <p className="truncate text-sm lg:hidden" style={{ color: "var(--text-muted)" }}>
                 {pageTitle}
               </p>
+              {!loading && user ? <NotificationsBell /> : null}
               {!loading && user ? (
                 <button
                   type="button"

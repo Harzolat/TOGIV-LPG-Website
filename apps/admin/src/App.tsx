@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import { AuthProvider, useAuth } from "./lib/auth";
 
 const Login = lazy(() => import("./pages/Login"));
+const Recovery = lazy(() => import("./pages/Recovery"));
 const Overview = lazy(() => import("./pages/Overview"));
 const Queue = lazy(() => import("./pages/Queue"));
 const RequestDetail = lazy(() => import("./pages/RequestDetail"));
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="requests/:id" element={page(<RequestDetail />)} />
               <Route path="customers" element={page(<Customers />)} />
               <Route path="customers/:id" element={page(<CustomerDetail />)} />
+              <Route path="recovery" element={page(<Recovery />)} />
               <Route path="team" element={page(<Team />)} />
               <Route path="add-admin" element={page(<AddAdmin />)} />
               <Route path="settings" element={page(<Settings />)} />

@@ -198,7 +198,71 @@ export interface StaffMember {
   createdAt: string;
 }
 
-// ───────────────────────────── Customers ─────────────────────────────
+// ───────────────────────────── Account recovery ─────────────────────────────
+
+/** `GET /auth/recovery-info` — business contact configuration for recovery. */
+export interface RecoveryContactInfo {
+  company: string;
+  phones: string[];
+  hours: string | null;
+  instructions?: string;
+}
+
+export type PinResetStatus = "pending" | "completed" | "expired" | "revoked";
+
+/** One operator authorization in the recovery audit list. */
+export interface PinResetAuthorization {
+  id: string;
+  status: PinResetStatus;
+  customerId: string | null;
+  customerName: string | null;
+  customerPhone: string;
+  createdBy: string | null;
+  createdByName: string | null;
+  note: string | null;
+  createdAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** `POST /admin/customers/:id/pin-reset` — token is shown exactly once. */
+export interface PinResetIssueResult {
+  ok: true;
+  resetToken: string;
+  expiresAt: string;
+  authorizationId: string;
+  customer: { id: string; fullName: string; phone: string };
+  notice: string;
+}
+
+export type StaffPasswordResetStatus = "pending" | "completed" | "expired" | "revoked";
+
+/** One operator-authorized staff password reset in the audit list. */
+export interface StaffPasswordResetAuthorization {
+  id: string;
+  status: StaffPasswordResetStatus;
+  staffId: string | null;
+  staffName: string | null;
+  staffIdentifier: string; // email or phone (non-secret contact identifier)
+  createdBy: string | null;
+  createdByName: string | null;
+  note: string | null;
+  createdAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+  revokedAt: string | null;
+}
+
+/** `POST /admin/staff/:id/password-reset-token` — token is shown exactly once. */
+export interface StaffPasswordResetIssueResult {
+  ok: true;
+  resetToken: string;
+  expiresAt: string;
+  authorizationId: string;
+  staff: { id: string; fullName: string; email: string | null; phone: string };
+  notice: string;
+}
 
 /** Row shape of `GET /customers` (staff directory). */
 export interface CustomerProfile {

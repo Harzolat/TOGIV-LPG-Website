@@ -6,6 +6,7 @@ import {
 } from "@togi/shared";
 import { generateOpaqueToken, sha256Hex } from "../common/tokens";
 import { normalizeNgPhone } from "../common/phone";
+import { NotificationEventsService } from "../notifications/notification-events.service";
 
 /**
  * Request engine — single source of truth `service_requests` (v1.2 §1.4.2).
@@ -25,9 +26,9 @@ const ENQUIRY_PREFIX = "ENQ";
 export interface SubmitRequestInput {
   type: RequestType;
   contactPhone: string; // raw — normalised here
-  customerId?: string | null;
+  customerId?: string | null; // CustomerProfile id
   submittedVia?: "qr" | "web" | "guest";
-  requestedById?: string | null;
+  requestedById?: string | null; // User id
   cylinderId?: string | null;
   addressId?: string | null;
   deliveryMethod?: "home" | "station" | null;
@@ -44,7 +45,10 @@ export interface SubmitResult {
 
 @Injectable()
 export class RequestService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly notifications: NotificationEventsService,
+  ) {}
 
   /** Creates a request + Submitted history row + (for guests) status link — one transaction. */
   async submit(input: SubmitRequestInput): Promise<SubmitResult> {
@@ -98,14 +102,14 @@ export class RequestService {
         });
       }
 
-      // Outbox: request-submitted notification (in-app; channel fan-out later)
-      await tx.notificationOutbox.create({
-        data: {
-          eventType: "request.submitted",
-          payload: { requestId: request.id, reference, type: input.type },
-          channel: "in_app",
-          dedupeKey: `request.submitted:${request.id}:Submitted`,
-        },
+      // Persistent notifications + push intents (idempotent, same transaction).
+      // Replaces legacy in_app outbox emission for this business event.
+      await this.notifications.emitRequestSubmitted(tx, {
+        requestId: request.id,
+        reference,
+        type: input.type,
+        customerId: input.customerId ?? null,
+        submittedByCustomerUserId: input.requestedById ?? null,
       });
 
       return { id: request.id, reference, statusLinkToken };
@@ -115,7 +119,7 @@ export class RequestService {
   /**
    * Matrix-validated status transition. Actor scoping (customer owns the
    * request, staff permitted) is the caller's guard; this enforces the
-   * matrix itself and writes history atomically.
+   * matrix itself and writes history + notifications atomically.
    */
   async transition(
     requestId: string,
@@ -141,6 +145,9 @@ export class RequestService {
         deliveryLinked: request.deliveryMethod === "home",
       });
 
+      const fromStatus = request.status as RequestStatus;
+      const visibleToCustomer = opts.visibleToCustomer ?? actor.kind !== "staff";
+
       await tx.serviceRequest.update({
         where: { id: requestId },
         data: {
@@ -150,25 +157,29 @@ export class RequestService {
         },
       });
 
-      await tx.requestStatusHistory.create({
+      // Capture actual history record for deterministic event identity.
+      const history = await tx.requestStatusHistory.create({
         data: {
           requestId,
-          fromStatus: request.status as RequestStatus,
+          fromStatus,
           toStatus: to,
           actorId: actor.userId ?? null,
           actorKind: actor.kind,
           note: opts.note ?? opts.reason ?? null,
-          visibleToCustomer: opts.visibleToCustomer ?? actor.kind !== "staff",
+          visibleToCustomer,
         },
       });
 
-      await tx.notificationOutbox.create({
-        data: {
-          eventType: "request.status_changed",
-          payload: { requestId, reference: request.reference, to },
-          channel: "in_app",
-          dedupeKey: `request.status:${request.id}:${to}:${Date.now()}`,
-        },
+      // Persistent notifications + push intents (idempotent, same transaction).
+      // Replaces legacy in_app outbox emission and Date.now()-based identity.
+      await this.notifications.emitRequestStatusChanged(tx, {
+        requestId,
+        reference: request.reference,
+        fromStatus,
+        toStatus: to,
+        historyId: history.id,
+        visibleToCustomer,
+        actorKind: actor.kind,
       });
     });
   }

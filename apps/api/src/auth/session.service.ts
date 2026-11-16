@@ -105,4 +105,24 @@ export class SessionService {
       data: { revokedAt: new Date() },
     });
   }
+
+  /**
+   * Revoke every session for a user except the one making the request.
+   * Used after a self-service password change so the current device stays
+   * signed in while other devices are cut off.
+   */
+  async revokeAllForUserExcept(userId: string, keepRawToken?: string): Promise<void> {
+    if (!keepRawToken) {
+      await this.revokeAllForUser(userId);
+      return;
+    }
+    await this.prisma.session.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        tokenHash: { not: hashToken(keepRawToken) },
+      },
+      data: { revokedAt: new Date() },
+    });
+  }
 }

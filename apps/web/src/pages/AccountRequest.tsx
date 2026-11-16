@@ -12,7 +12,7 @@ function statusText(
   deliveryMethod?: string | null,
 ): string {
   if (type === "refill" && deliveryMethod === "home" && status === "Dispatched") {
-    return "Team en route";
+    return "Team on the way";
   }
   return status.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
