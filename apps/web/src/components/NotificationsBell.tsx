@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, CheckCheck, Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@togi/ui";
 import { useAuth } from "../lib/auth";
 import { usePolling } from "../lib/usePolling";
 import {
@@ -27,6 +28,7 @@ function timeAgo(iso: string): string {
 export default function NotificationsBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -37,16 +39,50 @@ export default function NotificationsBell() {
   );
   const [pushMsg, setPushMsg] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const prevUnreadRef = useRef<number | null>(null);
+  const initializedUnreadRef = useRef(false);
+  const lastPopupKeyRef = useRef<string | null>(null);
 
   const refreshCount = useCallback(async () => {
     if (!user) return;
     try {
       const res = await getUnreadCount();
-      setUnread(res.unreadCount ?? 0);
+      const nextUnread = res.unreadCount ?? 0;
+      setUnread(nextUnread);
+
+      const prev = prevUnreadRef.current;
+      prevUnreadRef.current = nextUnread;
+
+      // Detect newly arrived updates after initial sync and show an in-app popup.
+      if (!initializedUnreadRef.current) {
+        initializedUnreadRef.current = true;
+        return;
+      }
+      if (prev !== null && nextUnread > prev) {
+        try {
+          const latestRes = await getNotifications({ page: 1, limit: 1, unreadOnly: true });
+          const latest = latestRes.items?.[0] ?? null;
+          const popupKey = latest?.id ?? `count:${nextUnread}`;
+          if (lastPopupKeyRef.current !== popupKey) {
+            lastPopupKeyRef.current = popupKey;
+            toast({
+              message: latest ? `${latest.title}: ${latest.body}` : "You have a new notification.",
+              tone: "info",
+              durationMs: 5000,
+            });
+          }
+        } catch {
+          const popupKey = `count:${nextUnread}`;
+          if (lastPopupKeyRef.current !== popupKey) {
+            lastPopupKeyRef.current = popupKey;
+            toast({ message: "You have a new notification.", tone: "info", durationMs: 4000 });
+          }
+        }
+      }
     } catch {
       // ignore polling errors
     }
-  }, [user]);
+  }, [toast, user]);
 
   const refreshList = useCallback(async () => {
     if (!user) return;
@@ -185,19 +221,22 @@ export default function NotificationsBell() {
 
       {open ? (
         <div
-          className="absolute right-0 z-50 mt-2 w-[min(92vw,24rem)] overflow-hidden rounded-xl border shadow-lg"
+          className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+3.75rem)] z-50 overflow-hidden rounded-xl border shadow-lg sm:absolute sm:inset-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-[min(92vw,24rem)]"
           style={{ borderColor: "var(--border)", background: "var(--surface-raised, #fff)" }}
           role="dialog"
           aria-label="Notifications"
         >
-          <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: "var(--border)" }}>
-            <div>
+          <div
+            className="flex flex-wrap items-start justify-between gap-2 border-b px-4 py-3"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>Notifications</p>
               <p className="text-xs" style={{ color: "var(--text-muted)" }}>In-app updates and browser push</p>
             </div>
             <button
               type="button"
-              className="inline-flex items-center gap-1 text-xs font-medium"
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-medium"
               style={{ color: "var(--primary)" }}
               onClick={() => void onMarkAll()}
               disabled={unread === 0}
@@ -217,9 +256,14 @@ export default function NotificationsBell() {
                 Notifications are blocked in browser settings. Allow them for this site to receive push alerts.
               </p>
             ) : pushState.subscribed ? (
-              <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="mt-2 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
                 <p className="text-sm" style={{ color: "var(--text)" }}>Notifications enabled on this browser.</p>
-                <button type="button" className="t-btn t-btn--secondary t-btn--sm" onClick={() => void onDisablePush()} disabled={pushBusy}>
+                <button
+                  type="button"
+                  className="t-btn t-btn--secondary t-btn--sm w-full sm:w-auto"
+                  onClick={() => void onDisablePush()}
+                  disabled={pushBusy}
+                >
                   {pushBusy ? <Loader2 size={14} className="animate-spin" /> : "Disable notifications"}
                 </button>
               </div>
@@ -230,15 +274,20 @@ export default function NotificationsBell() {
                     ? "Browser permission is granted, but notifications are not yet activated on this browser."
                     : "Get alerts for request updates."}
                 </p>
-                <button type="button" className="t-btn t-btn--primary t-btn--sm" onClick={() => void onEnablePush()} disabled={pushBusy}>
+                <button
+                  type="button"
+                  className="t-btn t-btn--primary t-btn--sm w-full sm:w-auto"
+                  onClick={() => void onEnablePush()}
+                  disabled={pushBusy}
+                >
                   {pushBusy ? <Loader2 size={14} className="animate-spin" /> : "Enable notifications"}
                 </button>
               </div>
             )}
-            {pushMsg ? <p className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>{pushMsg}</p> : null}
+            {pushMsg ? <p className="mt-2 text-xs break-words" style={{ color: "var(--text-muted)" }}>{pushMsg}</p> : null}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[min(60vh,24rem)] overflow-y-auto overscroll-contain sm:max-h-80">
             {loading && items.length === 0 ? (
               <div className="flex items-center justify-center px-4 py-8 text-sm" style={{ color: "var(--text-muted)" }}>
                 <Loader2 size={16} className="mr-2 animate-spin" /> Loading…
@@ -256,10 +305,10 @@ export default function NotificationsBell() {
                       onClick={() => void onItemClick(n)}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium" style={{ color: "var(--text)" }}>{n.title}</p>
+                        <p className="min-w-0 flex-1 break-words text-sm font-medium" style={{ color: "var(--text)" }}>{n.title}</p>
                         {!n.isRead ? <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: "var(--primary)" }} /> : null}
                       </div>
-                      <p className="mt-0.5 text-sm" style={{ color: "var(--text-muted)" }}>{n.body}</p>
+                      <p className="mt-0.5 break-words text-sm" style={{ color: "var(--text-muted)" }}>{n.body}</p>
                       <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>{timeAgo(n.createdAt)}</p>
                     </button>
                   </li>
