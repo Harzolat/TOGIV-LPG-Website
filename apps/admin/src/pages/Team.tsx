@@ -59,9 +59,13 @@ export default function Team() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (saving) return;
+    if (!email.trim()) {
+      toast({ message: "Enter a work email address.", tone: "error" });
+      return;
+    }
     if (password.length < 8) {
       toast({
-        message: "Set a temporary password of at least 8 characters.",
+        message: "Set a password of at least 8 characters.",
         tone: "error",
       });
       return;
@@ -72,8 +76,8 @@ export default function Team() {
         method: "POST",
         body: {
           fullName: fullName.trim(),
-          phone: phone.trim(),
-          email: email.trim() || null,
+          email: email.trim().toLowerCase(),
+          phone: phone.trim() || null,
           department: department.trim() || null,
           roleKeys: [roleKey],
           password,
@@ -102,16 +106,22 @@ export default function Team() {
 
   async function removeStaff(member: StaffMember) {
     if (member.id === user?.id) return;
-    const ok = window.confirm(`Delete staff account for ${member.fullName} (${member.phone})? This will revoke access.`);
+    const label = member.email || member.phone || member.fullName;
+    const ok = window.confirm(
+      `Permanently delete the staff account for ${member.fullName} (${label})? Access will be revoked and this action cannot be undone. The account's email/phone details can be used to create a new account afterward.`,
+    );
     if (!ok) return;
     setDeletingId(member.id);
     try {
       await api(`/admin/staff/${member.id}`, { method: "DELETE" });
-      toast({ message: "Staff account deleted.", tone: "success" });
+      toast({ message: "Staff account permanently deleted.", tone: "success" });
       await load();
     } catch (err) {
       toast({
-        message: err instanceof ApiError ? err.message : "Could not delete staff account.",
+        message:
+          err instanceof ApiError
+            ? err.message
+            : "Could not permanently delete staff account.",
         tone: "error",
       });
     } finally {
@@ -128,8 +138,7 @@ export default function Team() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          Create staff accounts. Each person signs in with their password and
-          sets up two-factor authentication on first login.
+          Create staff accounts. Each person signs in with their email and password.
         </p>
       </div>
 
@@ -150,25 +159,26 @@ export default function Team() {
             </label>
             <label className="block text-sm">
               <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
-                Phone number
-              </span>
-              <input
-                className="t-input w-full"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                required
-                placeholder="0803 000 0000"
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
-                Email (optional)
+                Email address
               </span>
               <input
                 className="t-input w-full"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="name@example.com"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
+                Phone number (optional)
+              </span>
+              <input
+                className="t-input w-full"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="0803 000 0000"
               />
             </label>
             <label className="block text-sm">
@@ -199,7 +209,7 @@ export default function Team() {
             </label>
             <label className="block text-sm">
               <span className="mb-1 block" style={{ color: "var(--text-muted)" }}>
-                Temporary password
+                Password
               </span>
               <input
                 className="t-input w-full"
@@ -211,8 +221,7 @@ export default function Team() {
                 autoComplete="new-password"
               />
               <span className="mt-1 block text-xs" style={{ color: "var(--text-muted)" }}>
-                At least 8 characters. The person will be asked to set up TOTP on
-                first sign-in.
+                At least 8 characters.
               </span>
             </label>
             <Button type="submit" loading={saving}>
@@ -254,8 +263,8 @@ export default function Team() {
                         className="mt-0.5 break-all text-xs"
                         style={{ color: "var(--text-muted)" }}
                       >
-                        {member.phone}
-                        {member.email ? ` · ${member.email}` : ""}
+                        {member.email ?? "—"}
+                        {member.phone ? ` · ${member.phone}` : ""}
                         {member.department ? ` · ${member.department}` : ""}
                       </p>
                     </div>
@@ -282,10 +291,9 @@ export default function Team() {
                     </div>
                   </div>
                   <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
-                    2FA: {member.totpEnrolled ? "enabled" : "not set up yet"}
                     {member.lastLoginAt
-                      ? ` · last sign-in ${new Date(member.lastLoginAt).toLocaleString()}`
-                      : ""}
+                      ? `Last sign-in ${new Date(member.lastLoginAt).toLocaleString()}`
+                      : "No sign-ins yet"}
                   </p>
                 </li>
               ))}

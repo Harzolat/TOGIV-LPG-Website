@@ -186,7 +186,7 @@ export interface QrResolveResult {
 
 export interface StaffMember {
   id: string;
-  phone: string;
+  phone: string | null;
   email: string | null;
   status: string;
   fullName: string;
@@ -268,7 +268,7 @@ export interface StaffPasswordResetIssueResult {
 export interface CustomerProfile {
   id: string;
   fullName: string;
-  phone: string;
+  phone: string | null;
   email?: string | null;
   state?: string | null;
   lga?: string | null;

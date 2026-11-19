@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 
 const NewRequest = lazy(() => import("./pages/NewRequest"));
 const Auth = lazy(() => import("./pages/Auth"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Account = lazy(() => import("./pages/Account"));
 const AccountRequest = lazy(() => import("./pages/AccountRequest"));
 const PolicyPages = lazy(() =>
@@ -69,6 +70,14 @@ export default function App() {
                 element={
                   <Suspense fallback={<PageFallback />}>
                     <Auth mode="register" />
+                  </Suspense>
+                }
+              />
+              <Route
+                path="reset-password"
+                element={
+                  <Suspense fallback={<PageFallback />}>
+                    <ResetPassword />
                   </Suspense>
                 }
               />

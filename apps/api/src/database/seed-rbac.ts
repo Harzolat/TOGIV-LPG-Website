@@ -126,28 +126,54 @@ export async function seedRbac(prisma: PrismaClient): Promise<void> {
   }
 }
 
-/** Bootstrap the first super admin (called from a CLI script with env vars). */
+/** Bootstrap the first super admin (email + password auth). */
 export async function ensureSuperAdmin(
   prisma: PrismaClient,
-  phone: string,
+  email: string,
   fullName: string,
   password?: string,
-  email?: string,
+  phone?: string | null,
 ): Promise<void> {
   const role = await prisma.role.findUnique({ where: { key: "super_admin" } });
   if (!role) throw new Error("Run seedRbac first.");
 
-  // phone is unique only among non-deleted rows (partial index), so upsert
-  // on phone isn't available — find the live row or create a new one.
-  const identified = { kind: "staff" as const, status: "active" as const, ...(email ? { email } : {}) };
-  const current = await prisma.user.findFirst({ where: { phone, deletedAt: null } });
-  const user = current
-    ? await prisma.user.update({ where: { id: current.id }, data: identified })
-    : await prisma.user.create({ data: { phone, ...identified } });
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("SEED_SUPER_ADMIN_EMAIL is required.");
 
-  // Initial password (staff auth = password + TOTP per §12). Re-running the
-  // seed with SEED_SUPER_ADMIN_PASSWORD resets it — useful for a local
-  // bootstrap, but keep the env file out of version control.
+  // Prefer matching by email (login identity). Fall back to phone for legacy DBs.
+  let current = await prisma.user.findFirst({
+    where: {
+      kind: "staff",
+      deletedAt: null,
+      email: { equals: normalizedEmail, mode: "insensitive" },
+    },
+  });
+  if (!current && phone) {
+    current = await prisma.user.findFirst({
+      where: { kind: "staff", deletedAt: null, phone },
+    });
+  }
+
+  const user = current
+    ? await prisma.user.update({
+        where: { id: current.id },
+        data: {
+          email: normalizedEmail,
+          ...(phone ? { phone } : {}),
+          kind: "staff",
+          status: "active",
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          phone: phone ?? null,
+          kind: "staff",
+          status: "active",
+        },
+      });
+
+  // Re-running the seed with SEED_SUPER_ADMIN_PASSWORD resets it for local bootstrap.
   if (password) {
     const bcrypt = await import("bcryptjs");
     const hash = await bcrypt.hash(password, 10);
@@ -159,7 +185,7 @@ export async function ensureSuperAdmin(
 
   await prisma.staffProfile.upsert({
     where: { userId: user.id },
-    update: {},
+    update: { fullName },
     create: { userId: user.id, fullName },
   });
 

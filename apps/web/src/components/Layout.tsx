@@ -124,17 +124,10 @@ export default function Layout() {
               <>
                 <Link
                   to="/login"
-                  className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium sm:hidden"
-                  style={{ color: "var(--text)" }}
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/login"
-                  className="t-btn t-btn--secondary t-btn--sm hidden sm:inline-flex"
+                  className="t-btn t-btn--secondary t-btn--sm inline-flex min-h-[44px] items-center gap-1.5"
                   style={{ borderRadius: "var(--radius-pill)" }}
                 >
-                  <User size={15} aria-hidden="true" />
+                  <User size={15} aria-hidden="true" className="hidden sm:inline" />
                   Login
                 </Link>
                 <Link

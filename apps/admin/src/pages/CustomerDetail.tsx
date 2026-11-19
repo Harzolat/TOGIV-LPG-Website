@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
-import { useAuth } from "../lib/auth";
 import { usePolling } from "../lib/usePolling";
 import { Button, Card, ErrorState, Skeleton, StatusPill, useToast } from "@togi/ui";
 import type { CustomerDetail as CustomerDetailPayload } from "@togi/shared";
@@ -33,7 +32,6 @@ export default function CustomerDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
   const [data, setData] = useState<CustomerDetailPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -52,16 +50,20 @@ export default function CustomerDetail() {
 
   async function removeCustomer() {
     if (!id || !data) return;
-    const ok = window.confirm(`Delete customer ${data.fullName} (${data.phone})? This will revoke their access.`);
+    const label = data.email || data.phone || data.fullName;
+    const ok = window.confirm(
+      `Permanently delete customer ${data.fullName} (${label})? Access will be revoked and this action cannot be undone. The account's email/phone details can be used to create a new account afterward.`,
+    );
     if (!ok) return;
     setDeleting(true);
     try {
       await api(`/customers/${id}`, { method: "DELETE" });
-      toast({ message: "Customer deleted.", tone: "success" });
+      toast({ message: "Customer permanently deleted.", tone: "success" });
       navigate("/customers", { replace: true });
     } catch (err) {
       toast({
-        message: err instanceof ApiError ? err.message : "Could not delete customer.",
+        message:
+          err instanceof ApiError ? err.message : "Could not permanently delete customer.",
         tone: "error",
       });
     } finally {
@@ -97,8 +99,8 @@ export default function CustomerDetail() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{data.fullName}</h1>
               <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-                {data.phone}
-                {data.email ? ` · ${data.email}` : ""}
+                {data.email ?? data.phone ?? "—"}
+                {data.email && data.phone ? ` · ${data.phone}` : ""}
               </p>
               <p className="mt-0.5 text-xs" style={{ color: "var(--text-muted)" }}>
                 Customer since {formatDate(data.createdAt)}
@@ -112,16 +114,8 @@ export default function CustomerDetail() {
                   Suspended {formatDate(data.suspendedAt)}
                 </span>
               ) : null}
-              {user?.roles.some((r) => r === "admin" || r === "super_admin") ? (
-                <Link
-                  to={`/recovery?customer=${data.id}`}
-                  className="t-btn t-btn--secondary t-btn--sm"
-                >
-                  Reset PIN
-                </Link>
-              ) : null}
               <Button variant="danger" size="sm" loading={deleting} onClick={() => void removeCustomer()}>
-                Delete customer
+                Permanently delete
               </Button>
             </div>
           </div>
@@ -129,7 +123,7 @@ export default function CustomerDetail() {
           <div className="mt-6 grid gap-5 lg:grid-cols-2">
             <Card padded title="Profile">
               <dl className="divide-y divide-[var(--border)]">
-                <Row label="Phone" value={data.phone} />
+                <Row label="Phone" value={data.phone ?? "—"} />
                 <Row label="Email" value={data.email ?? "—"} />
                 <Row label="Preferred contact" value={data.preferredContact ?? "sms"} />
                 <Row label="Marketing consent" value={data.marketingConsent ? "Yes" : "No"} />

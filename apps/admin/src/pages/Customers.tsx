@@ -35,16 +35,20 @@ export default function Customers() {
   usePolling(load, { intervalMs: 15_000 });
 
   async function removeCustomer(c: CustomerProfile) {
-    const ok = window.confirm(`Delete customer ${c.fullName ?? c.phone}? This will revoke their access.`);
+    const label = c.fullName ?? c.email ?? c.phone ?? "this customer";
+    const ok = window.confirm(
+      `Permanently delete customer ${label}? Access will be revoked and this action cannot be undone. The account's email/phone details can be used to create a new account afterward.`,
+    );
     if (!ok) return;
     setDeletingId(c.id);
     try {
       await api(`/customers/${c.id}`, { method: "DELETE" });
-      toast({ message: "Customer deleted.", tone: "success" });
+      toast({ message: "Customer permanently deleted.", tone: "success" });
       await load();
     } catch (err) {
       toast({
-        message: err instanceof ApiError ? err.message : "Could not delete customer.",
+        message:
+          err instanceof ApiError ? err.message : "Could not permanently delete customer.",
         tone: "error",
       });
     } finally {
@@ -118,9 +122,11 @@ export default function Customers() {
                     to={`/customers/${c.id}`}
                     className="min-w-0 flex-1 transition-colors hover:opacity-80"
                   >
-                    <span className="block font-mono text-sm font-semibold">{c.fullName ?? c.phone}</span>
+                    <span className="block font-mono text-sm font-semibold">
+                      {c.fullName ?? c.email ?? c.phone ?? "—"}
+                    </span>
                     <span className="mt-0.5 block text-xs" style={{ color: "var(--text-muted)" }}>
-                      {c.phone} · {formatDate(c.createdAt)}
+                      {c.email ?? c.phone ?? "—"} · {formatDate(c.createdAt)}
                     </span>
                   </Link>
                   <div className="flex items-center gap-2">
@@ -133,7 +139,7 @@ export default function Customers() {
                       loading={deletingId === c.id}
                       onClick={() => void removeCustomer(c)}
                     >
-                      Delete
+                      Permanently delete
                     </Button>
                   </div>
                 </li>

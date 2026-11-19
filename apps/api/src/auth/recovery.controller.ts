@@ -2,10 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpException,
   Post,
-  Get,
   Req,
   Res,
 } from "@nestjs/common";
@@ -23,21 +23,40 @@ import { RecoveryThrottle } from "./recovery-throttle";
 /**
  * Public recovery endpoints + authenticated password change.
  *
- * Public surface (narrow, non-enumerating):
- * - GET  /auth/recovery-info              → business contact configuration only
- * - POST /auth/customer/recovery-request  → generic guidance, no account oracle
- * - POST /auth/customer/pin-reset         → redeem operator-issued PIN token
- * - POST /auth/staff/recovery-request     → generic guidance, no account oracle
- * - POST /auth/staff/password-reset       → redeem operator-issued staff token
+ * Self-service password reset (email + one-time token, non-enumerating):
+ * - POST /auth/customer/forgot-password  → request reset token
+ * - POST /auth/customer/reset-password   → redeem token, set new password
+ * - POST /auth/staff/forgot-password     → request reset token
+ * - POST /auth/staff/reset-password      → redeem token, set new password
  *
- * Admin/staff password reset tokens are issued only after manual identity
- * verification (console by authorized operator, or break-glass CLI where
- * applicable). Token redemption sets a new password but preserves TOTP.
+ * Legacy/operator-issued token redemption endpoints are kept for compatibility.
  */
 
-const pinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits.");
+const emailSchema = z
+  .string()
+  .trim()
+  .email("Enter a valid email address.")
+  .max(200)
+  .transform((v) => v.toLowerCase());
 
-const pinResetSchema = z
+const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+const resetPasswordSchema = z
+  .object({
+    token: z.string().trim().min(20).max(300),
+    newPassword: z.string().min(8).max(200),
+    confirmPassword: z.string().min(8).max(200).optional(),
+  })
+  .refine((v) => v.confirmPassword == null || v.newPassword === v.confirmPassword, {
+    message: "Password confirmation does not match.",
+    path: ["confirmPassword"],
+  });
+
+// Legacy operator-issued customer PIN reset (kept for compatibility where needed)
+const pinSchema = z.string().regex(/^\d{4}$/, "PIN must be exactly 4 digits.");
+const legacyPinResetSchema = z
   .object({
     token: z.string().trim().min(20).max(300),
     newPin: pinSchema,
@@ -49,23 +68,22 @@ const pinResetSchema = z
   });
 
 const recoveryRequestSchema = z.object({
-  // Accepted for the operator's context but never stored or inspected for
-  // existence. Invalid/absent values get the same guidance.
   phone: z.string().trim().max(40).optional(),
+  email: z.string().trim().max(200).optional(),
 });
 
 const staffRecoveryRequestSchema = z.object({
-  // Accepted for operator context but never stored or inspected for existence.
   identifier: z.string().trim().max(200).optional(),
+  email: z.string().trim().max(200).optional(),
 });
 
 const staffPasswordResetSchema = z
   .object({
     token: z.string().trim().min(20).max(300),
     newPassword: z.string().min(8).max(200),
-    confirmPassword: z.string().min(8).max(200),
+    confirmPassword: z.string().min(8).max(200).optional(),
   })
-  .refine((v) => v.newPassword === v.confirmPassword, {
+  .refine((v) => v.confirmPassword == null || v.newPassword === v.confirmPassword, {
     message: "Password confirmation does not match.",
     path: ["confirmPassword"],
   });
@@ -83,7 +101,7 @@ export class RecoveryController {
     private readonly quota: RecoveryThrottle,
   ) {}
 
-  /** Business contact details for the recovery pages (no account data). */
+  /** Business contact details for recovery/help pages (no account data). */
   @Public()
   @Get("recovery-info")
   async recoveryInfo() {
@@ -91,16 +109,192 @@ export class RecoveryController {
     return {
       ...contact,
       instructions:
-        "Account recovery is completed after manual identity verification by our team. We will never ask for your PIN or password. Customers use operator-issued PIN reset tokens; staff/admin use operator-issued password reset tokens (authenticator remains required).",
+        "Forgot your password? Enter your email address and we’ll send a password reset link to your email if an account exists.",
       staffInstructions:
-        "Admin password recovery requires identity verification by a super administrator/owner. They may issue a one-time password reset token so you can set a new password (your authenticator stays enrolled). If the initial super administrator is locked out of the console, use the server-side break-glass recovery process on the API host.",
+        "Staff/admin: enter your work email address and we’ll send a password reset link to your email if an account exists.",
+      selfService: true,
     };
   }
 
-  /**
-   * "I need help" request. Always returns identical guidance and stores
-   * nothing, so registered and unregistered numbers are indistinguishable.
-   */
+  // ── Self-service: customer ────────────────────────────────────────
+
+  @Public()
+  @Post("customer/forgot-password")
+  @HttpCode(200)
+  async customerForgotPassword(
+    @Body() body: unknown,
+    @Req() req: CookieAwareRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = forgotPasswordSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("Enter a valid email address.");
+    }
+    assertOrigin(req);
+
+    const wait = this.quota.hit(`${req.ip}|customer-forgot-password`);
+    if (wait > 0) {
+      res.setHeader("Retry-After", Math.ceil(wait / 1000));
+      throw new HttpException(
+        "Too many requests. Please try again later.",
+        429,
+      );
+    }
+
+    await this.recovery.requestSelfServicePasswordReset(
+      parsed.data.email,
+      "customer",
+      req.ip,
+    );
+    return {
+      ok: true,
+      message:
+        "If an account exists for this email, a password reset link has been sent.",
+    };
+  }
+
+  @Public()
+  @Post("customer/reset-password")
+  @HttpCode(200)
+  async customerResetPassword(
+    @Body() body: unknown,
+    @Req() req: CookieAwareRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = resetPasswordSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? "Check the form and try again.",
+      );
+    }
+    assertOrigin(req);
+
+    const ipWait = this.quota.hit(`${req.ip}|customer-reset-password`);
+    if (ipWait > 0) {
+      res.setHeader("Retry-After", Math.ceil(ipWait / 1000));
+      throw new HttpException(
+        "Too many attempts. Please wait and try again.",
+        429,
+      );
+    }
+
+    const key = `${req.ip}|customer-reset-password|${hashToken(parsed.data.token).slice(0, 16)}`;
+    const wait = this.throttle.retryAfterMs(key);
+    if (wait > 0) {
+      res.setHeader("Retry-After", Math.ceil(wait / 1000));
+      throw new HttpException(
+        "Too many attempts. Please wait and try again.",
+        429,
+      );
+    }
+
+    try {
+      await this.recovery.consumeSelfServicePasswordReset(
+        parsed.data.token,
+        parsed.data.newPassword,
+        "customer",
+        req.ip,
+      );
+      this.throttle.reset(key);
+    } catch (err) {
+      this.throttle.fail(key);
+      throw err;
+    }
+
+    return { ok: true };
+  }
+
+  // ── Self-service: staff/admin ─────────────────────────────────────
+
+  @Public()
+  @Post("staff/forgot-password")
+  @HttpCode(200)
+  async staffForgotPassword(
+    @Body() body: unknown,
+    @Req() req: CookieAwareRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = forgotPasswordSchema.safeParse(body ?? {});
+    if (!parsed.success) {
+      throw new BadRequestException("Enter a valid email address.");
+    }
+    assertOrigin(req);
+
+    const wait = this.quota.hit(`${req.ip}|staff-forgot-password`);
+    if (wait > 0) {
+      res.setHeader("Retry-After", Math.ceil(wait / 1000));
+      throw new HttpException(
+        "Too many requests. Please try again later.",
+        429,
+      );
+    }
+
+    await this.recovery.requestSelfServicePasswordReset(
+      parsed.data.email,
+      "staff",
+      req.ip,
+    );
+    return {
+      ok: true,
+      message:
+        "If an account exists for this email, a password reset link has been sent.",
+    };
+  }
+
+  @Public()
+  @Post("staff/reset-password")
+  @HttpCode(200)
+  async staffResetPasswordSelfService(
+    @Body() body: unknown,
+    @Req() req: CookieAwareRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const parsed = resetPasswordSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.issues[0]?.message ?? "Check the form and try again.",
+      );
+    }
+    assertOrigin(req);
+
+    const ipWait = this.quota.hit(`${req.ip}|staff-reset-password-self`);
+    if (ipWait > 0) {
+      res.setHeader("Retry-After", Math.ceil(ipWait / 1000));
+      throw new HttpException(
+        "Too many attempts. Please wait and try again.",
+        429,
+      );
+    }
+
+    const key = `${req.ip}|staff-reset-password-self|${hashToken(parsed.data.token).slice(0, 16)}`;
+    const wait = this.throttle.retryAfterMs(key);
+    if (wait > 0) {
+      res.setHeader("Retry-After", Math.ceil(wait / 1000));
+      throw new HttpException(
+        "Too many attempts. Please wait and try again.",
+        429,
+      );
+    }
+
+    try {
+      await this.recovery.consumeSelfServicePasswordReset(
+        parsed.data.token,
+        parsed.data.newPassword,
+        "staff",
+        req.ip,
+      );
+      this.throttle.reset(key);
+    } catch (err) {
+      this.throttle.fail(key);
+      throw err;
+    }
+
+    return { ok: true };
+  }
+
+  // ── Legacy / compatibility endpoints ──────────────────────────────
+
+  /** @deprecated Use POST /auth/customer/forgot-password (kept for compatibility). */
   @Public()
   @Post("customer/recovery-request")
   @HttpCode(200)
@@ -124,10 +318,18 @@ export class RecoveryController {
       );
     }
 
-    return this.recovery.recoveryRequestGuidance();
+    const email = parsed.data.email?.trim().toLowerCase();
+    if (email && z.string().email().safeParse(email).success) {
+      await this.recovery.requestSelfServicePasswordReset(email, "customer", req.ip);
+    }
+    return {
+      ok: true,
+      message:
+        "If an account exists for this email, a password reset link has been sent.",
+    };
   }
 
-  /** Redeem a single-use PIN reset token issued by an operator. */
+  /** Legacy operator-issued PIN token redemption (kept; sets password hash). */
   @Public()
   @Post("customer/pin-reset")
   @HttpCode(200)
@@ -136,7 +338,7 @@ export class RecoveryController {
     @Req() req: CookieAwareRequest,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const parsed = pinResetSchema.safeParse(body);
+    const parsed = legacyPinResetSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
         parsed.error.issues[0]?.message ?? "Check the form and try again.",
@@ -144,8 +346,6 @@ export class RecoveryController {
     }
     assertOrigin(req);
 
-    // Per-IP quota first: it caps the CPU cost of hashing regardless of how
-    // many distinct (invalid) tokens one client tries.
     const ipWait = this.quota.hit(`${req.ip}|customer-pin-reset`);
     if (ipWait > 0) {
       res.setHeader("Retry-After", Math.ceil(ipWait / 1000));
@@ -180,7 +380,7 @@ export class RecoveryController {
     return { ok: true };
   }
 
-  /** Staff/admin "need help" request — generic guidance, non-enumerating. */
+  /** @deprecated Use POST /auth/staff/forgot-password (kept for compatibility). */
   @Public()
   @Post("staff/recovery-request")
   @HttpCode(200)
@@ -204,10 +404,20 @@ export class RecoveryController {
       );
     }
 
-    return this.recovery.staffRecoveryRequestGuidance();
+    const email = (parsed.data.email ?? parsed.data.identifier ?? "")
+      .trim()
+      .toLowerCase();
+    if (email && z.string().email().safeParse(email).success) {
+      await this.recovery.requestSelfServicePasswordReset(email, "staff", req.ip);
+    }
+    return {
+      ok: true,
+      message:
+        "If an account exists for this email, a password reset link has been sent.",
+    };
   }
 
-  /** Redeem an operator-issued staff password reset token (preserves TOTP). */
+  /** Operator-issued staff password reset token redemption (preserves TOTP in legacy model). */
   @Public()
   @Post("staff/password-reset")
   @HttpCode(200)

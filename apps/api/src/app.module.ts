@@ -15,6 +15,7 @@ import { AuthGuard } from "./auth/auth.guard";
 import { CustomerCredentialsController } from "./auth/customer-credentials.controller";
 import { LoginThrottle } from "./auth/login-throttle";
 import { RecoveryController } from "./auth/recovery.controller";
+import { MailerService } from "./auth/mailer.service";
 import { RecoveryService } from "./auth/recovery.service";
 import { RecoveryThrottle } from "./auth/recovery-throttle";
 import { SessionService } from "./auth/session.service";
@@ -90,6 +91,7 @@ const healthPrismaProvider = {
     SessionService,
     LoginThrottle,
     RecoveryThrottle,
+    MailerService,
     RecoveryService,
     AuthGuard,
     QrService,

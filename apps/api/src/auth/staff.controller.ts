@@ -16,14 +16,7 @@ import type { Response } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { PrismaClient, User } from "@prisma/client";
-import { decryptSecret, encryptSecret } from "../common/crypto";
 import { normalizeNgPhone } from "../common/phone";
-import {
-  signState,
-  StateTokenError,
-  verifyState,
-} from "../common/tokens";
-import { generateTotpSecret, totpAuthUri, verifyTotp } from "../common/totp";
 import { assertOrigin, issueCsrf, setSessionCookie } from "./cookies";
 import type { CookieAwareRequest } from "./cookies";
 import { RequireAudience } from "./auth.guard";
@@ -32,60 +25,34 @@ import { LoginThrottle } from "./login-throttle";
 import { SessionService } from "./session.service";
 
 /**
- * Staff authentication — v1.2 §12: password + TOTP second factor.
- *
- * Three-step flow, enumeration-resistant and uniformly timed:
- *  1. POST /auth/staff/login  (password only)
- *       → { step: "enroll", enrollmentToken }  first login: enroll TOTP
- *       → { step: "totp" }                     password ok, code needed
- *       → { ok, csrfToken }                    both factors ok → session
- *  2. POST /auth/staff/enroll/setup   → { secret, otpauthUri } (shown once)
- *  3. POST /auth/staff/enroll/verify  → secret validated, encrypted at rest,
- *                                       admin session issued
- *
- * The enrollment challenge is an HMAC-signed self-expiring state token —
- * no server-side pending rows. Password check runs against a dummy hash
- * when the account is unknown (uniform timing). Throttling: LoginThrottle
- * progressive lockout keyed by ip|identifier; totp guesses count too.
+ * Staff authentication — email + password (TOTP removed per current auth model).
+ * Enumeration-resistant and uniformly timed: password check runs against a
+ * dummy hash when the account is unknown.
  */
 
+const emailSchema = z
+  .string()
+  .trim()
+  .email()
+  .max(200)
+  .transform((v) => v.toLowerCase());
+
 const loginSchema = z.object({
-  identifier: z.string().trim().min(3).max(200),
-  // Login validates presence, not policy: the password may have been set
-  // before the current policy (or by an operator bootstrap), and rejecting
-  // it here would leak policy state instead of just failing authentication.
+  // Accept `email` (preferred) or legacy `identifier` containing an email.
+  email: emailSchema.optional(),
+  identifier: z.string().trim().min(3).max(200).optional(),
   password: z.string().min(1).max(200),
-  totpCode: z.string().regex(/^\d{6}$/).optional(),
-});
-
-const enrollSetupSchema = z.object({
-  enrollmentToken: z.string().min(20).max(600),
-});
-
-const enrollVerifySchema = z.object({
-  enrollmentToken: z.string().min(20).max(600),
-  secret: z.string().regex(/^[A-Z2-7]{16,64}$/, "Invalid TOTP secret format."),
-  code: z.string().regex(/^\d{6}$/),
 });
 
 const profileUpdateSchema = z.object({
   fullName: z.string().trim().min(2).max(120).optional(),
   department: z.string().trim().max(80).nullable().optional(),
-  phone: z.string().trim().min(6).max(20).optional(),
-  email: z
-    .string()
-    .trim()
-    .email()
-    .max(200)
-    .nullable()
-    .optional()
-    .transform((v) => (typeof v === "string" ? v.toLowerCase() : v)),
+  phone: z.string().trim().max(20).nullable().optional(),
+  email: emailSchema.nullable().optional(),
 });
 
-const ENROLL_TTL_MS = 15 * 60_000;
 const BCRYPT_COST = 10;
 
-/** Lazy dummy hash so unknown-account logins cost the same as known ones. */
 let dummyHashPromise: Promise<string> | null = null;
 function dummyHash(): Promise<string> {
   dummyHashPromise ??= bcrypt.hash(
@@ -94,8 +61,6 @@ function dummyHash(): Promise<string> {
   );
   return dummyHashPromise;
 }
-
-type EnrollmentState = { uid: string; purpose: string };
 
 @Controller("auth/staff")
 export class StaffAuthController {
@@ -116,15 +81,25 @@ export class StaffAuthController {
     if (!parsed.success) throw new ForbiddenException("Invalid payload.");
     assertOrigin(req);
 
-    const identifier = parsed.data.identifier;
-    const key = `${req.ip}|${identifier.toLowerCase()}`;
+    const rawEmail = parsed.data.email ?? parsed.data.identifier ?? "";
+    const emailParsed = emailSchema.safeParse(rawEmail);
+    if (!emailParsed.success) {
+      await bcrypt.compare(parsed.data.password, await dummyHash());
+      throw new ForbiddenException("Incorrect email or password.");
+    }
+    const email = emailParsed.data;
+
+    const key = `${req.ip}|staff|${email}`;
     const wait = this.throttle.retryAfterMs(key);
     if (wait > 0) {
       res.setHeader("Retry-After", Math.ceil(wait / 1000));
-      throw new HttpException("Too many attempts. Please wait and try again.", 429);
+      throw new HttpException(
+        "Too many attempts. Please wait and try again.",
+        429,
+      );
     }
 
-    const user = await this.findStaff(identifier);
+    const user = await this.findStaffByEmail(email);
     const passwordOk = await bcrypt.compare(
       parsed.data.password,
       user?.passwordHash ?? (await dummyHash()),
@@ -132,100 +107,13 @@ export class StaffAuthController {
 
     if (!user || !passwordOk || !user.passwordHash) {
       this.throttle.fail(key);
-      throw new ForbiddenException("Incorrect credentials.");
+      throw new ForbiddenException("Incorrect email or password.");
     }
-
-    const profile = await this.prisma.staffProfile.findUnique({
-      where: { userId: user.id },
-    });
-    if (!profile) {
-      this.throttle.fail(key);
-      throw new ForbiddenException("Incorrect credentials.");
-    }
-
-    // First login: no TOTP yet → start enrollment (password already proven)
-    if (!profile.totpEnrolledAt || !profile.totpSecret) {
-      this.throttle.reset(key);
-      const enrollmentToken = signState(
-        { uid: user.id, purpose: "totp-enroll" },
-        ENROLL_TTL_MS,
-      );
-      return { step: "enroll" as const, enrollmentToken };
-    }
-
-    // Password ok, second factor pending
-    if (!parsed.data.totpCode) {
-      return { step: "totp" as const };
-    }
-
-    const secret = decryptSecret(profile.totpSecret);
-    if (!verifyTotp(secret, parsed.data.totpCode)) {
-      this.throttle.fail(key); // code guesses count toward lockout
-      throw new ForbiddenException("Incorrect credentials.");
+    if (user.status !== "active") {
+      throw new ForbiddenException("Account unavailable. Please contact support.");
     }
 
     this.throttle.reset(key);
-    return this.issueSession(user, req, res);
-  }
-
-  @Post("enroll/setup")
-  @HttpCode(200)
-  async enrollSetup(@Body() body: unknown) {
-    const parsed = enrollSetupSchema.safeParse(body);
-    if (!parsed.success) throw new ForbiddenException("Invalid payload.");
-
-    const state = this.readEnrollment(parsed.data.enrollmentToken);
-    const profile = await this.prisma.staffProfile.findUnique({
-      where: { userId: state.uid },
-    });
-    if (!profile) throw new ForbiddenException("Enrollment is not available.");
-    if (profile.totpEnrolledAt) {
-      throw new ForbiddenException("Two-factor is already set up. Sign in.");
-    }
-
-    // Generated here, NOT persisted — only the client holds it until
-    // enroll/verify proves a valid code, then it is encrypted at rest.
-    const secret = generateTotpSecret();
-    const account = profile.employeeRef ?? (await this.accountLabel(state.uid));
-    return { secret, otpauthUri: totpAuthUri(secret, account) };
-  }
-
-  @Post("enroll/verify")
-  @HttpCode(200)
-  async enrollVerify(
-    @Body() body: unknown,
-    @Req() req: CookieAwareRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const parsed = enrollVerifySchema.safeParse(body);
-    if (!parsed.success) throw new ForbiddenException("Invalid payload.");
-
-    const state = this.readEnrollment(parsed.data.enrollmentToken);
-
-    if (!verifyTotp(parsed.data.secret, parsed.data.code)) {
-      throw new ForbiddenException(
-        "That code didn't match. Open your authenticator app and enter the current code.",
-      );
-    }
-
-    const user = await this.prisma.user.findUnique({ where: { id: state.uid } });
-    if (
-      !user ||
-      user.kind !== "staff" ||
-      user.status !== "active" ||
-      user.deletedAt
-    ) {
-      throw new ForbiddenException("Account is not active.");
-    }
-
-    await this.prisma.staffProfile.update({
-      where: { userId: user.id },
-      data: {
-        totpSecret: encryptSecret(parsed.data.secret),
-        totpEnrolledAt: new Date(),
-      },
-    });
-
     return this.issueSession(user, req, res);
   }
 
@@ -248,7 +136,7 @@ export class StaffAuthController {
       fullName: user.staffProfile?.fullName ?? null,
       department: user.staffProfile?.department ?? null,
       roles: user.roles.map((ur) => ur.role.key),
-      totpEnrolled: Boolean(user.staffProfile?.totpEnrolledAt),
+      totpEnrolled: false,
     };
   }
 
@@ -258,7 +146,9 @@ export class StaffAuthController {
     const parsed = profileUpdateSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
-        parsed.error.issues.map((i) => `${i.path.join(".") || "field"}: ${i.message}`).join("; "),
+        parsed.error.issues
+          .map((i) => `${i.path.join(".") || "field"}: ${i.message}`)
+          .join("; "),
       );
     }
 
@@ -272,20 +162,27 @@ export class StaffAuthController {
       throw new ForbiddenException("Account not found.");
     }
 
-    let nextPhone: string | undefined;
+    let nextPhone: string | null | undefined;
     if (data.phone !== undefined) {
-      try {
-        nextPhone = normalizeNgPhone(data.phone);
-      } catch {
-        throw new BadRequestException("Enter a valid Nigerian phone number.");
-      }
-      if (nextPhone !== existing.phone) {
-        const phoneConflict = await this.prisma.user.findFirst({
-          where: { phone: nextPhone, id: { not: userId }, deletedAt: null },
-          select: { id: true },
-        });
-        if (phoneConflict) {
-          throw new ConflictException("This phone number is already used by another account.");
+      const raw = data.phone?.trim() ?? "";
+      if (!raw) {
+        nextPhone = null;
+      } else {
+        try {
+          nextPhone = normalizeNgPhone(raw);
+        } catch {
+          throw new BadRequestException("Enter a valid Nigerian phone number.");
+        }
+        if (nextPhone !== existing.phone) {
+          const phoneConflict = await this.prisma.user.findFirst({
+            where: { phone: nextPhone, id: { not: userId }, deletedAt: null },
+            select: { id: true },
+          });
+          if (phoneConflict) {
+            throw new ConflictException(
+              "This phone number is already used by another account.",
+            );
+          }
         }
       }
     }
@@ -294,12 +191,15 @@ export class StaffAuthController {
       const conflict = await this.prisma.user.findFirst({
         where: {
           id: { not: userId },
+          deletedAt: null,
           email: { equals: data.email, mode: "insensitive" },
         },
         select: { id: true },
       });
       if (conflict) {
-        throw new ConflictException("This email is already used by another account.");
+        throw new ConflictException(
+          "This email is already used by another account.",
+        );
       }
     }
 
@@ -318,7 +218,9 @@ export class StaffAuthController {
           where: { userId },
           update: {
             ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
-            ...(data.department !== undefined ? { department: data.department } : {}),
+            ...(data.department !== undefined
+              ? { department: data.department }
+              : {}),
           },
           create: {
             userId,
@@ -335,7 +237,9 @@ export class StaffAuthController {
           entityId: userId,
           after: {
             ...(data.fullName !== undefined ? { fullName: data.fullName } : {}),
-            ...(data.department !== undefined ? { department: data.department } : {}),
+            ...(data.department !== undefined
+              ? { department: data.department }
+              : {}),
             ...(data.email !== undefined ? { email: data.email } : {}),
             ...(nextPhone !== undefined ? { phone: nextPhone } : {}),
           },
@@ -348,35 +252,14 @@ export class StaffAuthController {
 
   // ── helpers ─────────────────────────────────────────────────────
 
-  private async findStaff(identifier: string): Promise<User | null> {
-    const asEmail = identifier.includes("@") ? identifier.toLowerCase() : null;
+  private async findStaffByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findFirst({
       where: {
         kind: "staff",
         deletedAt: null,
-        OR: [...(asEmail ? [{ email: asEmail }] : []), { phone: identifier }],
+        email: { equals: email, mode: "insensitive" },
       },
     });
-  }
-
-  private readEnrollment(token: string): EnrollmentState {
-    try {
-      const state = verifyState<EnrollmentState>(token);
-      if (state.purpose !== "totp-enroll" || !state.uid) {
-        throw new StateTokenError("Wrong purpose.");
-      }
-      return state;
-    } catch {
-      throw new ForbiddenException("Enrollment session expired. Sign in again.");
-    }
-  }
-
-  private async accountLabel(userId: string): Promise<string> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { email: true, phone: true },
-    });
-    return user?.email ?? user?.phone ?? "staff";
   }
 
   private async issueSession(

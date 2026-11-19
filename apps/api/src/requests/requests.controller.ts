@@ -335,7 +335,7 @@ export class RequestsController {
   @Post("link/candidates")
   @RequireAudience("customer")
   async linkCandidates(@Req() req: AuthedRequest) {
-    const candidates = await this.requests.findLinkCandidates(req.user!.phone);
+    const candidates = await this.requests.findLinkCandidates(req.user!.phone ?? null);
     return { candidates };
   }
 

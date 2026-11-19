@@ -35,7 +35,11 @@ function makePrisma() {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
-    user: { findUnique: vi.fn(), update: vi.fn() },
+    user: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
     session: { updateMany: vi.fn() },
     auditLog: { create: vi.fn() },
     businessSetting: { findUnique: vi.fn() },
@@ -57,6 +61,7 @@ const ACTIVE_CUSTOMER = {
   user: {
     id: "user_1",
     phone: "+2348012345678",
+    kind: "customer",
     status: "active",
     deletedAt: null,
   },
@@ -69,7 +74,10 @@ const ACTIVE_STAFF = {
   kind: "staff",
   status: "active",
   deletedAt: null,
-  staffProfile: { fullName: "Staff User", totpEnrolledAt: new Date("2026-01-01T00:00:00Z") },
+  staffProfile: {
+    fullName: "Staff User",
+    totpEnrolledAt: new Date("2026-01-01T00:00:00Z"),
+  },
 };
 
 describe("pin reset status", () => {
@@ -90,7 +98,11 @@ describe("pin reset status", () => {
       pinResetStatus({ consumedAt: null, revokedAt: null, expiresAt: future }),
     ).toBe("pending");
     expect(
-      staffPasswordResetStatus({ consumedAt: null, revokedAt: null, expiresAt: future }),
+      staffPasswordResetStatus({
+        consumedAt: null,
+        revokedAt: null,
+        expiresAt: future,
+      }),
     ).toBe("pending");
   });
 });
@@ -177,6 +189,7 @@ describe("RecoveryService.consumePinReset", () => {
       revokedAt: null,
       user: {
         id: "user_1",
+        kind: "customer",
         status: "active",
         deletedAt: null,
         customerProfile: { id: "cust_1" },
@@ -185,24 +198,28 @@ describe("RecoveryService.consumePinReset", () => {
     };
   }
 
-  it("rejects an unknown token without touching an account", { timeout: 15000 }, async () => {
-    ctx.prisma.pinResetToken.findUnique.mockResolvedValue(null);
+  it(
+    "rejects an unknown token without touching an account",
+    { timeout: 15000 },
+    async () => {
+      ctx.prisma.pinResetToken.findUnique.mockResolvedValue(null);
 
-    await expect(
-      ctx.service.consumePinReset("not-a-real-token-value-000", "1234"),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(ctx.prisma.user.update).not.toHaveBeenCalled();
-    expect(ctx.prisma.session.updateMany).not.toHaveBeenCalled();
-  });
+      await expect(
+        ctx.service.consumePinReset("not-a-real-token-value-000", "1234"),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(ctx.prisma.user.update).not.toHaveBeenCalled();
+      expect(ctx.prisma.session.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects an expired token", async () => {
     ctx.prisma.pinResetToken.findUnique.mockResolvedValue(
       tokenRow({ expiresAt: new Date(Date.now() - 1_000) }),
     );
 
-    await expect(
-      ctx.service.consumePinReset(rawToken, "1234"),
-    ).rejects.toThrow(/expired/i);
+    await expect(ctx.service.consumePinReset(rawToken, "1234")).rejects.toThrow(
+      /expired/i,
+    );
     expect(ctx.prisma.user.update).not.toHaveBeenCalled();
   });
 
@@ -211,9 +228,9 @@ describe("RecoveryService.consumePinReset", () => {
       tokenRow({ consumedAt: new Date() }),
     );
 
-    await expect(
-      ctx.service.consumePinReset(rawToken, "1234"),
-    ).rejects.toThrow(/already been used/i);
+    await expect(ctx.service.consumePinReset(rawToken, "1234")).rejects.toThrow(
+      /already been used/i,
+    );
     expect(ctx.prisma.user.update).not.toHaveBeenCalled();
   });
 
@@ -227,39 +244,44 @@ describe("RecoveryService.consumePinReset", () => {
     expect(ctx.prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("stores a bcrypt hash, consumes the token and revokes sessions", { timeout: 15000 }, async () => {
-    ctx.prisma.pinResetToken.findUnique.mockResolvedValue(tokenRow());
-    ctx.prisma.pinResetToken.updateMany.mockResolvedValue({ count: 1 });
-    ctx.prisma.user.update.mockResolvedValue({});
-    ctx.prisma.session.updateMany.mockResolvedValue({ count: 3 });
+  it(
+    "stores a bcrypt hash, consumes the token and revokes sessions",
+    { timeout: 15000 },
+    async () => {
+      ctx.prisma.pinResetToken.findUnique.mockResolvedValue(tokenRow());
+      ctx.prisma.pinResetToken.updateMany.mockResolvedValue({ count: 1 });
+      ctx.prisma.user.updateMany.mockResolvedValue({ count: 1 });
+      ctx.prisma.session.updateMany.mockResolvedValue({ count: 3 });
 
-    await ctx.service.consumePinReset(rawToken, "5678", "10.0.0.9");
+      await ctx.service.consumePinReset(rawToken, "5678", "10.0.0.9");
 
-    const stored = ctx.prisma.user.update.mock.calls[0][0].data.passwordHash;
-    expect(stored).not.toBe("5678");
-    expect(stored.startsWith("$2")).toBe(true);
-    expect(await bcrypt.compare("5678", stored)).toBe(true);
-    expect(await bcrypt.compare("1234", stored)).toBe(false);
+      const stored =
+        ctx.prisma.user.updateMany.mock.calls[0][0].data.passwordHash;
+      expect(stored).not.toBe("5678");
+      expect(stored.startsWith("$2")).toBe(true);
+      expect(await bcrypt.compare("5678", stored)).toBe(true);
+      expect(await bcrypt.compare("1234", stored)).toBe(false);
 
-    const claim = ctx.prisma.pinResetToken.updateMany.mock.calls[0][0];
-    expect(claim.where).toEqual({
-      id: "token_1",
-      consumedAt: null,
-      revokedAt: null,
-    });
-    expect(claim.data.consumedAt).toBeInstanceOf(Date);
+      const claim = ctx.prisma.pinResetToken.updateMany.mock.calls[0][0];
+      expect(claim.where).toEqual({
+        id: "token_1",
+        consumedAt: null,
+        revokedAt: null,
+      });
+      expect(claim.data.consumedAt).toBeInstanceOf(Date);
 
-    expect(ctx.prisma.session.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { userId: "user_1", revokedAt: null },
-      }),
-    );
+      expect(ctx.prisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: "user_1", revokedAt: null },
+        }),
+      );
 
-    const audit = ctx.prisma.auditLog.create.mock.calls[0][0].data;
-    expect(audit.action).toBe("customer.pin_reset_completed");
-    expect(JSON.stringify(audit)).not.toContain(rawToken);
-    expect(JSON.stringify(audit)).not.toContain("5678");
-  });
+      const audit = ctx.prisma.auditLog.create.mock.calls[0][0].data;
+      expect(audit.action).toBe("customer.pin_reset_completed");
+      expect(JSON.stringify(audit)).not.toContain(rawToken);
+      expect(JSON.stringify(audit)).not.toContain("5678");
+    },
+  );
 });
 
 describe("RecoveryService.recoveryContact", () => {
@@ -307,11 +329,15 @@ describe("RecoveryService.authorizeStaffPasswordReset", () => {
 
   it("issues a token once, stores only its hash, and audits (TOTP preserved)", async () => {
     ctx.prisma.user.findUnique.mockResolvedValue(ACTIVE_STAFF);
-    ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({ count: 0 });
-    ctx.prisma.staffPasswordResetToken.create.mockImplementation(({ data }: any) => ({
-      id: "srt_1",
-      ...data,
-    }));
+    ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({
+      count: 0,
+    });
+    ctx.prisma.staffPasswordResetToken.create.mockImplementation(
+      ({ data }: any) => ({
+        id: "srt_1",
+        ...data,
+      }),
+    );
     ctx.prisma.auditLog.create.mockResolvedValue({});
 
     const result = await ctx.service.authorizeStaffPasswordReset(
@@ -329,7 +355,8 @@ describe("RecoveryService.authorizeStaffPasswordReset", () => {
       phone: "+2348099999999",
     });
 
-    const created = ctx.prisma.staffPasswordResetToken.create.mock.calls[0][0].data;
+    const created =
+      ctx.prisma.staffPasswordResetToken.create.mock.calls[0][0].data;
     expect(created.tokenHash).toBe(hashToken(result.token));
     expect(created.tokenHash).not.toBe(result.token);
     expect(created.expiresAt.getTime()).toBeGreaterThan(
@@ -344,12 +371,18 @@ describe("RecoveryService.authorizeStaffPasswordReset", () => {
   });
 
   it("refuses issuance for non-staff/inactive/deleted targets", async () => {
-    ctx.prisma.user.findUnique.mockResolvedValue({ ...ACTIVE_STAFF, status: "suspended" });
+    ctx.prisma.user.findUnique.mockResolvedValue({
+      ...ACTIVE_STAFF,
+      status: "suspended",
+    });
     await expect(
       ctx.service.authorizeStaffPasswordReset("staff_target", "actor_admin"),
     ).rejects.toBeInstanceOf(BadRequestException);
 
-    ctx.prisma.user.findUnique.mockResolvedValue({ ...ACTIVE_STAFF, kind: "customer" });
+    ctx.prisma.user.findUnique.mockResolvedValue({
+      ...ACTIVE_STAFF,
+      kind: "customer",
+    });
     await expect(
       ctx.service.authorizeStaffPasswordReset("staff_target", "actor_admin"),
     ).rejects.toBeInstanceOf(NotFoundException);
@@ -389,7 +422,10 @@ describe("RecoveryService.consumeStaffPasswordReset", () => {
   it("rejects an unknown token without touching the account", async () => {
     ctx.prisma.staffPasswordResetToken.findUnique.mockResolvedValue(null);
     await expect(
-      ctx.service.consumeStaffPasswordReset("not-a-real-token-value-000", "NewPass123"),
+      ctx.service.consumeStaffPasswordReset(
+        "not-a-real-token-value-000",
+        "NewPass123",
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(ctx.prisma.user.update).not.toHaveBeenCalled();
     expect(ctx.prisma.session.updateMany).not.toHaveBeenCalled();
@@ -417,49 +453,72 @@ describe("RecoveryService.consumeStaffPasswordReset", () => {
 
   it("does not update the account when the atomic claim loses a race", async () => {
     ctx.prisma.staffPasswordResetToken.findUnique.mockResolvedValue(tokenRow());
-    ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({ count: 0 });
+    ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({
+      count: 0,
+    });
     await expect(
       ctx.service.consumeStaffPasswordReset(rawToken, "NewPass123"),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(ctx.prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("sets new password hash, consumes token, revokes sessions, and preserves TOTP", { timeout: 15000 }, async () => {
-    ctx.prisma.staffPasswordResetToken.findUnique.mockResolvedValue(tokenRow());
-    ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({ count: 1 });
-    ctx.prisma.user.update.mockResolvedValue({});
-    ctx.prisma.session.updateMany.mockResolvedValue({ count: 2 });
+  it(
+    "sets new password hash, consumes token, revokes sessions, and preserves TOTP",
+    { timeout: 15000 },
+    async () => {
+      ctx.prisma.staffPasswordResetToken.findUnique.mockResolvedValue(
+        tokenRow(),
+      );
+      ctx.prisma.staffPasswordResetToken.updateMany.mockResolvedValue({
+        count: 1,
+      });
+      ctx.prisma.user.update.mockResolvedValue({});
+      ctx.prisma.session.updateMany.mockResolvedValue({ count: 2 });
 
-    await ctx.service.consumeStaffPasswordReset(rawToken, "NewPass123", "10.0.0.9");
+      await ctx.service.consumeStaffPasswordReset(
+        rawToken,
+        "NewPass123",
+        "10.0.0.9",
+      );
 
-    const stored = ctx.prisma.user.update.mock.calls[0][0].data.passwordHash;
-    expect(stored).not.toBe("NewPass123");
-    expect(await bcrypt.compare("NewPass123", stored)).toBe(true);
-    // Only password hash updated (TOTP fields untouched by this flow)
-    expect(Object.keys(ctx.prisma.user.update.mock.calls[0][0].data)).toEqual(["passwordHash"]);
+      const stored = ctx.prisma.user.update.mock.calls[0][0].data.passwordHash;
+      expect(stored).not.toBe("NewPass123");
+      expect(await bcrypt.compare("NewPass123", stored)).toBe(true);
+      // Only password hash updated (TOTP fields untouched by this flow)
+      expect(Object.keys(ctx.prisma.user.update.mock.calls[0][0].data)).toEqual(
+        ["passwordHash"],
+      );
 
-    const claim = ctx.prisma.staffPasswordResetToken.updateMany.mock.calls[0][0];
-    expect(claim.where).toEqual({ id: "srt_1", consumedAt: null, revokedAt: null });
-    expect(claim.data.consumedAt).toBeInstanceOf(Date);
+      const claim =
+        ctx.prisma.staffPasswordResetToken.updateMany.mock.calls[0][0];
+      expect(claim.where).toEqual({
+        id: "srt_1",
+        consumedAt: null,
+        revokedAt: null,
+      });
+      expect(claim.data.consumedAt).toBeInstanceOf(Date);
 
-    expect(ctx.prisma.session.updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { userId: "staff_target", revokedAt: null },
-      }),
-    );
+      expect(ctx.prisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { userId: "staff_target", revokedAt: null },
+        }),
+      );
 
-    const audit = ctx.prisma.auditLog.create.mock.calls[0][0].data;
-    expect(audit.action).toBe("staff.password_reset_completed");
-    expect(audit.after.totpPreserved).toBe(true);
-    expect(audit.after.sessionsRevoked).toBe(true);
-    expect(JSON.stringify(audit)).not.toContain(rawToken);
-    expect(JSON.stringify(audit)).not.toContain("NewPass123");
-  });
+      const audit = ctx.prisma.auditLog.create.mock.calls[0][0].data;
+      expect(audit.action).toBe("staff.password_reset_completed");
+      expect(audit.after.totpPreserved).toBe(true);
+      expect(audit.after.sessionsRevoked).toBe(true);
+      expect(JSON.stringify(audit)).not.toContain(rawToken);
+      expect(JSON.stringify(audit)).not.toContain("NewPass123");
+    },
+  );
 
   it("rejects weak passwords before consuming a token", async () => {
     await expect(
       ctx.service.consumeStaffPasswordReset(rawToken, "short"),
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(ctx.prisma.staffPasswordResetToken.findUnique).not.toHaveBeenCalled();
+    expect(
+      ctx.prisma.staffPasswordResetToken.findUnique,
+    ).not.toHaveBeenCalled();
   });
 });

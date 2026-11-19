@@ -11,11 +11,9 @@ import { ensureSuperAdmin, seedRbac } from "./seed-rbac";
  *   pnpm --filter @togi/api db:seed
  *
  * Environment (apps/api/.env):
- *   SEED_SUPER_ADMIN_PHONE     required to create the first super admin
- *   SEED_SUPER_ADMIN_PASSWORD  initial password (staff then enrolls TOTP on
- *                              first login; password is never overwritten
- *                              on re-runs)
- *   SEED_SUPER_ADMIN_EMAIL     optional — email login for the console
+ *   SEED_SUPER_ADMIN_EMAIL     required to create the first super admin (email login)
+ *   SEED_SUPER_ADMIN_PASSWORD  initial password
+ *   SEED_SUPER_ADMIN_PHONE     optional contact number
  *   SEED_SUPER_ADMIN_NAME      optional display name
  */
 
@@ -32,10 +30,6 @@ async function main(): Promise<void> {
   await seedRbac(prisma);
   console.log("RBAC matrix seeded (roles + permissions, idempotent).");
 
-  // Business contact configuration for the recovery pages. The migration
-  // seeds the already-published numbers; these env vars let a new
-  // environment provision the same row without a code change. Existing
-  // operator-edited values are never overwritten.
   const contactPhone = process.env.BUSINESS_CONTACT_PHONE?.trim();
   if (contactPhone) {
     await prisma.businessSetting.upsert({
@@ -55,32 +49,31 @@ async function main(): Promise<void> {
     console.log("Business recovery contact configuration present.");
   }
 
-  const phone = process.env.SEED_SUPER_ADMIN_PHONE;
-  const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
-  // Emails are one-per-account and case-insensitive (lower(email) unique
-  // index); normalise the operator-supplied value before it is written.
   const email = process.env.SEED_SUPER_ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.SEED_SUPER_ADMIN_PASSWORD;
+  const phoneRaw = process.env.SEED_SUPER_ADMIN_PHONE?.trim();
 
-  if (phone && password) {
-    let normalized: string;
+  let phone: string | null = null;
+  if (phoneRaw) {
     try {
-      normalized = normalizeNgPhone(phone);
+      phone = normalizeNgPhone(phoneRaw);
     } catch {
-      normalized = phone; // allow non-NG test numbers; login matches exactly
+      phone = phoneRaw; // allow non-NG/test numbers
     }
+  }
+
+  if (email && password) {
     await ensureSuperAdmin(
       prisma,
-      normalized,
+      email,
       process.env.SEED_SUPER_ADMIN_NAME ?? "Super Administrator",
       password,
-      email,
+      phone,
     );
-    console.log(
-      `Super admin ready → login with ${email ?? normalized} (TOTP enrollment on first login).`,
-    );
+    console.log(`Super admin ready → login with ${email} (email + password).`);
   } else {
     console.log(
-      "Skipped super admin: set SEED_SUPER_ADMIN_PHONE + SEED_SUPER_ADMIN_PASSWORD to create one.",
+      "Skipped super admin: set SEED_SUPER_ADMIN_EMAIL + SEED_SUPER_ADMIN_PASSWORD to create one.",
     );
   }
 

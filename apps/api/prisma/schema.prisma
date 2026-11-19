@@ -35,8 +35,8 @@ enum UserStatus {
 
 model User {
   id              String     @id @default(uuid())
-  phone           String // one credential, one account — full unique index (migration 0003)
-  email           String?    @unique // case-insensitive uniqueness enforced by lower(email) index
+  phone           String? // optional contact number; unique among active (non-deleted) accounts when present — partial unique index (migration 0010)
+  email           String? // login identity for email+password auth; case-insensitive unique among active (non-deleted) accounts — partial unique index (migration 0010)
   emailVerifiedAt DateTime?
   phoneVerifiedAt DateTime?
   passwordHash    String?

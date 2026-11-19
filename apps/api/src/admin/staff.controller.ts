@@ -16,31 +16,25 @@ import { z } from "zod";
 import type { AuthedRequest } from "../auth/auth.guard";
 import { RequireAudience, RequirePermission } from "../auth/auth.guard";
 import { normalizeNgPhone, PhoneNormalizationError } from "../common/phone";
+import { validatePasswordStrength } from "../auth/password";
 
 /**
  * Staff account management — super administrators only (staff:manage).
- *
- * Creates staff identities with an initial password; the person completes
- * TOTP enrollment on their first sign-in (the existing staff auth flow).
- * Phones/emails are one-credential-per-account (same rule as customers).
+ * Email + password auth; phone is optional contact info.
  */
 
 const createSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
-  phone: z.string().min(6).max(20),
   email: z
     .string()
     .trim()
-    .email()
+    .email("Enter a valid email address.")
     .max(200)
-    .optional()
-    .nullable()
-    .transform((v) => (v ? v.toLowerCase() : null)),
+    .transform((v) => v.toLowerCase()),
+  phone: z.string().trim().max(20).optional().nullable(),
   department: z.string().trim().max(80).optional().nullable(),
   employeeRef: z.string().trim().max(40).optional().nullable(),
   roleKeys: z.array(z.string().min(1)).min(1).max(10),
-  // Creation enforces a minimum; login validates presence only so legacy
-  // bootstrap passwords keep working until changed.
   password: z.string().min(8).max(200),
 });
 
@@ -119,15 +113,8 @@ export class AdminStaffController {
 
     const data = parsed.data;
 
-    let phone: string;
-    try {
-      phone = normalizeNgPhone(data.phone);
-    } catch (e) {
-      if (e instanceof PhoneNormalizationError) {
-        throw new BadRequestException("Enter a valid Nigerian phone number.");
-      }
-      throw e;
-    }
+    const strength = validatePasswordStrength(data.password);
+    if (strength) throw new BadRequestException(strength);
 
     const roleKeys = [...new Set(data.roleKeys)].filter((k) => k !== "customer");
     if (roleKeys.length === 0) {
@@ -142,22 +129,34 @@ export class AdminStaffController {
       throw new BadRequestException("One or more selected roles are not valid.");
     }
 
-    // One credential, one active account: reject if phone is already in use
-    // by a non-deleted account. Soft-deleted numbers may be reused.
-    const existingPhone = await this.prisma.user.findFirst({
-      where: { phone, deletedAt: null },
+    const email = data.email;
+    const existingEmail = await this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" }, deletedAt: null },
+      select: { id: true },
     });
-    if (existingPhone) {
-      throw new ConflictException(
-        "This phone number is already used by an account.",
-      );
+    if (existingEmail) {
+      throw new ConflictException("This email is already used by an account.");
     }
-    if (data.email) {
-      const existingEmail = await this.prisma.user.findFirst({
-        where: { email: { equals: data.email, mode: "insensitive" } },
+
+    let phone: string | null = null;
+    const rawPhone = data.phone?.trim();
+    if (rawPhone) {
+      try {
+        phone = normalizeNgPhone(rawPhone);
+      } catch (e) {
+        if (e instanceof PhoneNormalizationError) {
+          throw new BadRequestException("Enter a valid Nigerian phone number.");
+        }
+        throw e;
+      }
+      const existingPhone = await this.prisma.user.findFirst({
+        where: { phone, deletedAt: null },
+        select: { id: true },
       });
-      if (existingEmail) {
-        throw new ConflictException("This email is already used by an account.");
+      if (existingPhone) {
+        throw new ConflictException(
+          "This phone number is already used by an account.",
+        );
       }
     }
 
@@ -166,8 +165,8 @@ export class AdminStaffController {
     const user = await this.prisma.$transaction(async (tx) => {
       const created = await tx.user.create({
         data: {
+          email,
           phone,
-          email: data.email ?? null,
           passwordHash,
           kind: "staff",
           status: "active",
@@ -196,8 +195,8 @@ export class AdminStaffController {
           entityType: "user",
           entityId: created.id,
           after: {
-            phone: created.phone,
             email: created.email,
+            phone: created.phone,
             roles: roleKeys,
           },
         },

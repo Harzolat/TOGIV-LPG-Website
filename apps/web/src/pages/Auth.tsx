@@ -8,12 +8,8 @@ interface Props {
   mode: "login" | "register";
 }
 
-function isValidNgPhone(value: string): boolean {
-  return /^(?:\+?234|0)?[789][01]\d{8}$/.test(value.replace(/[\s\-().]/g, ""));
-}
-
-function isValidPin(value: string): boolean {
-  return /^\d{4}$/.test(value);
+function isValidEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
 export default function Auth({ mode }: Props) {
@@ -25,28 +21,44 @@ export default function Auth({ mode }: Props) {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateAccountPrompt, setShowCreateAccountPrompt] = useState(false);
 
+  const prefillEmail = (location.state as { email?: string } | null)?.email ?? "";
   const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState(prefillEmail);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [pin, setPin] = useState("");
-  const [confirmPin, setConfirmPin] = useState("");
-  const [showPin, setShowPin] = useState(false);
   const [address, setAddress] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
-  const phoneValid = useMemo(() => isValidNgPhone(phone), [phone]);
+  // Self-service password recovery (email link)
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+
+  const emailValid = useMemo(() => isValidEmail(email), [email]);
 
   if (!loading && user) return <Navigate to={from} replace />;
+
+  function openRecovery() {
+    setRecoveryOpen((v) => !v);
+    setForgotError(null);
+    setForgotMessage(null);
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setShowCreateAccountPrompt(false);
 
-    if (!phoneValid) {
-      setError("Enter a valid Nigerian phone number.");
+    if (!emailValid) {
+      setError("Enter a valid email address.");
       return;
     }
-    if (!isValidPin(pin)) {
-      setError("Enter a 4-digit PIN.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
       return;
     }
 
@@ -55,12 +67,8 @@ export default function Auth({ mode }: Props) {
         setError("Please enter your full name.");
         return;
       }
-      if (pin !== confirmPin) {
-        setError("PIN confirmation does not match.");
-        return;
-      }
-      if (address.trim().length < 5) {
-        setError("Please enter your residential/delivery address.");
+      if (password !== confirmPassword) {
+        setError("Password confirmation does not match.");
         return;
       }
     }
@@ -72,23 +80,31 @@ export default function Auth({ mode }: Props) {
           method: "POST",
           body: {
             fullName: fullName.trim(),
-            phone: phone.trim(),
-            pin,
-            confirmPin,
-            address: address.trim(),
+            email: email.trim().toLowerCase(),
+            password,
+            confirmPassword,
+            phone: phone.trim() || undefined,
+            address: address.trim() || undefined,
           },
         });
       } else {
         await api("/auth/customer/login", {
           method: "POST",
-          body: { phone: phone.trim(), pin },
+          body: { email: email.trim().toLowerCase(), password },
         });
       }
       await refresh();
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message || "Unable to sign in. Please try again.");
+        const msg = err.message || "Unable to sign in. Please try again.";
+        setError(msg);
+        if (
+          !isRegister &&
+          /no account found for this email/i.test(msg)
+        ) {
+          setShowCreateAccountPrompt(true);
+        }
       } else {
         setError("Unable to sign in. Please try again.");
       }
@@ -97,14 +113,42 @@ export default function Auth({ mode }: Props) {
     }
   }
 
+  async function submitForgotPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setForgotError(null);
+    setForgotMessage(null);
+
+    const target = email.trim().toLowerCase();
+    if (!isValidEmail(target)) {
+      setForgotError("Enter your email address above first.");
+      return;
+    }
+
+    setForgotBusy(true);
+    try {
+      const res = await api<{ ok: boolean; message?: string }>(
+        "/auth/customer/forgot-password",
+        { method: "POST", body: { email: target } },
+      );
+      setForgotMessage(
+        res.message ||
+          "If an account exists for this email, a password reset link has been sent.",
+      );
+    } catch (err) {
+      setForgotError(
+        err instanceof ApiError
+          ? err.message || "Could not request password reset."
+          : "Could not request password reset.",
+      );
+    } finally {
+      setForgotBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-md anim-enter">
       <div className="mb-6 flex justify-center">
-        <Link
-          to="/"
-          aria-label="TOGIV — home"
-          className="inline-flex"
-        >
+        <Link to="/" aria-label="TOGIV — home" className="inline-flex">
           <span
             className="text-xl font-semibold tracking-[0.14em] sm:text-2xl"
             style={{ color: "var(--text)" }}
@@ -119,8 +163,8 @@ export default function Auth({ mode }: Props) {
         </h1>
         <p className="mt-1.5 text-sm" style={{ color: "var(--text-muted)" }}>
           {isRegister
-            ? "Register with your phone number and a 4-digit PIN to manage your requests."
-            : "Sign in with your phone number and 4-digit PIN."}
+            ? "Register with your email and password to manage your requests."
+            : "Sign in with your email and password."}
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-4 stagger-children" noValidate>
@@ -135,62 +179,83 @@ export default function Auth({ mode }: Props) {
           ) : null}
 
           <TextInput
-            label="Phone number"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="0803 123 4567"
-            hint="Nigerian mobile number"
+            label="Email address"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             required
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
 
           <TextInput
-            label="4-digit PIN"
-            type={showPin ? "text" : "password"}
-            inputMode="numeric"
+            label="Password"
+            type={showPassword ? "text" : "password"}
             autoComplete={isRegister ? "new-password" : "current-password"}
-            maxLength={4}
-            placeholder="••••"
+            placeholder={isRegister ? "At least 8 characters" : "Enter your password"}
             required
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
           />
 
           {isRegister ? (
             <TextInput
-              label="Confirm 4-digit PIN"
-              type={showPin ? "text" : "password"}
-              inputMode="numeric"
+              label="Confirm password"
+              type={showPassword ? "text" : "password"}
               autoComplete="new-password"
-              maxLength={4}
-              placeholder="••••"
               required
-              value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
             />
           ) : null}
 
           <label className="flex items-center gap-2 text-sm" style={{ color: "var(--text-muted)" }}>
-            <input type="checkbox" checked={showPin} onChange={(e) => setShowPin(e.target.checked)} />
-            Show PIN
+            <input
+              type="checkbox"
+              checked={showPassword}
+              onChange={(e) => setShowPassword(e.target.checked)}
+            />
+            Show password
           </label>
 
           {isRegister ? (
-            <TextInput
-              label="Residential/Delivery address"
-              required
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter your residential or delivery address"
-            />
+            <>
+              <TextInput
+                label="Phone number (optional)"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="0803 123 4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <TextInput
+                label="Residential/Delivery address (optional)"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Enter your residential or delivery address"
+              />
+            </>
           ) : null}
 
           {error ? (
-            <p role="alert" className="text-sm" style={{ color: "var(--error)" }}>
-              {error}
-            </p>
+            <div role="alert" className="text-sm" style={{ color: "var(--error)" }}>
+              <p>{error}</p>
+              {showCreateAccountPrompt ? (
+                <p className="mt-2" style={{ color: "var(--text-muted)" }}>
+                  <Link
+                    to="/register"
+                    state={{ from, email: email.trim().toLowerCase() }}
+                    className="font-medium underline"
+                    style={{ color: "var(--text)" }}
+                  >
+                    Create an account
+                  </Link>{" "}
+                  with this email, then sign in.
+                </p>
+              ) : null}
+            </div>
           ) : null}
 
           <Button type="submit" size="lg" block loading={busy}>
@@ -198,7 +263,37 @@ export default function Auth({ mode }: Props) {
           </Button>
         </form>
 
+        {!isRegister ? (
+          <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
+            <button
+              type="button"
+              className="text-sm font-medium underline"
+              style={{ color: "var(--text)" }}
+              onClick={() => void openRecovery()}
+              aria-expanded={recoveryOpen}
+            >
+              Forgot password?
+            </button>
 
+            {recoveryOpen ? (
+              <form onSubmit={submitForgotPassword} className="mt-3 space-y-3" noValidate>
+                {forgotError ? (
+                  <p role="alert" className="text-sm" style={{ color: "var(--error)" }}>
+                    {forgotError}
+                  </p>
+                ) : null}
+                {forgotMessage ? (
+                  <p role="status" className="text-sm" style={{ color: "var(--success, #16a34a)" }}>
+                    {forgotMessage}
+                  </p>
+                ) : null}
+                <Button type="submit" variant="secondary" block loading={forgotBusy}>
+                  Send reset link
+                </Button>
+              </form>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <p className="mt-5 text-center text-sm" style={{ color: "var(--text-muted)" }}>

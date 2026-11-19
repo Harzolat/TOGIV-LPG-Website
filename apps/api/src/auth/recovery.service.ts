@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { generateOpaqueToken, hashToken } from "../common/tokens";
+import { MailerService } from "./mailer.service";
 import {
   generateTemporaryPassword,
   hashPassword,
@@ -21,24 +23,17 @@ import {
 /**
  * Account recovery orchestration.
  *
- * Customer PIN reset and staff password reset are deliberately two-step,
- * operator-authorized flows using manual out-of-band identity verification:
- *   1. an authorized operator verifies identity and issues a reset token
- *      → a 256-bit token is generated, only its SHA-256 hash is stored;
- *   2. the account holder redeems the token with a new PIN/password
- *      → the token is consumed exactly once and sessions are revoked.
- *
- * Staff password reset via token sets a new password chosen by the staff
- * member while preserving TOTP enrollment (2FA remains required). Initial
- * super-admin lockout recovery is handled via the server-side break-glass CLI
- * (not public HTTP).
- *
- * Public responses never reveal whether an account exists. Reset tokens and
- * credentials are never logged.
+ * - Self-service password reset: user requests reset by email, receives a
+ *   one-time token (delivered out-of-band; in non-production the token is
+ *   logged and may be returned for local use), and redeems it to set a new
+ *   password. Responses never reveal whether an account exists.
+ * - Operator-authorized flows (legacy/admin-assisted) remain available for
+ *   console/break-glass support where applicable.
  */
 
 export const PIN_RESET_TTL_MS = 30 * 60_000;
 export const STAFF_PASSWORD_RESET_TTL_MS = 30 * 60_000;
+export const SELF_SERVICE_PASSWORD_RESET_TTL_MS = 30 * 60_000;
 
 export type PinResetStatus = "pending" | "completed" | "expired" | "revoked";
 export type StaffPasswordResetStatus = PinResetStatus;
@@ -62,11 +57,11 @@ export function pinResetStatus(
 export const staffPasswordResetStatus = pinResetStatus;
 
 const INVALID_TOKEN =
-  "This reset token is not valid. Ask Throne of Grace to issue a new one.";
+  "This reset token is not valid. Request a new password reset and try again.";
 const USED_TOKEN =
-  "This reset token has already been used. Ask Throne of Grace to issue a new one.";
+  "This reset token has already been used. Request a new password reset and try again.";
 const EXPIRED_TOKEN =
-  "This reset token has expired. Ask Throne of Grace to issue a new one.";
+  "This reset token has expired. Request a new password reset and try again.";
 
 const DEFAULT_COMPANY = "Throne of Grace Integrated Ventures";
 
@@ -78,10 +73,201 @@ export interface RecoveryContact {
 
 @Injectable()
 export class RecoveryService {
+  private readonly logger = new Logger(RecoveryService.name);
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly sessions: SessionService,
+    private readonly mailer?: MailerService,
   ) {}
+
+  // ── Self-service password reset (email + token link) ──────────────
+
+  private resetLink(token: string, kind: "customer" | "staff"): string {
+    const base =
+      kind === "customer"
+        ? (process.env.CUSTOMER_APP_URL ?? process.env.WEB_APP_URL ?? "http://localhost:5175").replace(/\/$/, "")
+        : (process.env.ADMIN_APP_URL ?? "http://localhost:5176").replace(/\/$/, "");
+    const path = kind === "customer" ? "/reset-password" : "/reset-password";
+    return `${base}${path}?token=${encodeURIComponent(token)}`;
+  }
+
+  private async sendPasswordResetEmail(
+    email: string,
+    token: string,
+    kind: "customer" | "staff",
+  ): Promise<void> {
+    const link = this.resetLink(token, kind);
+    const appLabel = kind === "customer" ? "Throne of Grace LPG" : "Throne of Grace Admin";
+    const subject = `${appLabel} password reset`;
+    const text = [
+      `You requested a password reset for your ${appLabel} account.`,
+      "",
+      "Use the link below to set a new password (valid for a limited time, one-time use):",
+      link,
+      "",
+      "If you did not request this, you can ignore this message.",
+    ].join("\n");
+    const html = `<p>You requested a password reset for your <strong>${appLabel}</strong> account.</p>
+<p><a href="${link}">Reset your password</a></p>
+<p style="font-size:12px;color:#666">Or copy this link: ${link}</p>
+<p style="font-size:12px;color:#666">This link is valid for a limited time and can be used once. If you did not request this, you can ignore this message.</p>`;
+    if (!this.mailer) {
+      this.logger.warn(`[DEV] Password reset link for ${kind} ${email}: ${link}`);
+      return;
+    }
+    await this.mailer.send({ to: email, subject, text, html });
+    this.logger.log(`Password reset email dispatched for ${kind} account (${email}).`);
+  }
+
+  async requestSelfServicePasswordReset(
+    rawEmail: string,
+    kind: "customer" | "staff",
+    ip?: string,
+  ) {
+    const email = rawEmail.trim().toLowerCase();
+    if (!email) {
+      return { ok: true as const };
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: "insensitive" },
+        kind,
+        deletedAt: null,
+        status: "active",
+      },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      // No enumeration.
+      return { ok: true as const };
+    }
+
+    const rawToken = generateOpaqueToken(32);
+    const expiresAt = new Date(Date.now() + SELF_SERVICE_PASSWORD_RESET_TTL_MS);
+
+    await this.prisma.$transaction(async (tx) => {
+      // Invalidate previous unused tokens for this user.
+      await tx.passwordResetToken.updateMany({
+        where: {
+          userId: user.id,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        data: { consumedAt: new Date() },
+      });
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashToken(rawToken),
+          expiresAt,
+          ip: ip ?? null,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: user.id,
+          action:
+            kind === "customer"
+              ? "customer.password_reset_requested"
+              : "staff.password_reset_requested",
+          entityType: "user",
+          entityId: user.id,
+          ip: ip ?? null,
+          after: { expiresAt: expiresAt.toISOString(), selfService: true },
+        },
+      });
+    });
+
+    if (this.mailer) {
+      await this.sendPasswordResetEmail(user.email ?? email, rawToken, kind);
+    } else {
+      this.logger.warn(
+        `[DEV] Password reset link for ${kind} ${user.email ?? email}: ${this.resetLink(rawToken, kind)}`,
+      );
+    }
+
+    return { ok: true as const };
+  }
+
+  async consumeSelfServicePasswordReset(
+    rawToken: string,
+    newPassword: string,
+    kind: "customer" | "staff",
+    ip?: string,
+  ) {
+    const strength = validatePasswordStrength(newPassword);
+    if (strength) throw new BadRequestException(strength);
+
+    const newHash = await hashPassword(newPassword);
+
+    const row = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: hashToken(rawToken) },
+      include: {
+        user: {
+          select: {
+            id: true,
+            kind: true,
+            status: true,
+            deletedAt: true,
+            customerProfile: { select: { id: true } },
+          },
+        },
+      },
+    });
+
+    if (!row) throw new BadRequestException(INVALID_TOKEN);
+    if (row.consumedAt) throw new BadRequestException(USED_TOKEN);
+    if (row.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException(EXPIRED_TOKEN);
+    }
+    if (
+      row.user.deletedAt ||
+      row.user.kind !== kind ||
+      row.user.status !== "active"
+    ) {
+      throw new ForbiddenException(
+        "Account unavailable. Please contact support.",
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: row.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new BadRequestException(USED_TOKEN);
+
+      await tx.user.update({
+        where: { id: row.userId },
+        data: { passwordHash: newHash },
+      });
+      await tx.session.updateMany({
+        where: { userId: row.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: row.userId,
+          action:
+            kind === "customer"
+              ? "customer.password_reset_completed"
+              : "staff.password_reset_completed",
+          entityType: kind === "customer" ? "customer" : "user",
+          entityId:
+            kind === "customer"
+              ? (row.user.customerProfile?.id ?? row.userId)
+              : row.userId,
+          ip: ip ?? null,
+          after: { tokenId: row.id, selfService: true, sessionsRevoked: true },
+        },
+      });
+    });
+
+    return { ok: true as const };
+  }
 
   // ── Customer PIN reset ─────────────────────────────────────────────
 
@@ -95,10 +281,22 @@ export class RecoveryService {
     const customer = await this.prisma.customerProfile.findUnique({
       where: { id: customerId },
       include: {
-        user: { select: { id: true, phone: true, status: true, deletedAt: true } },
+        user: {
+          select: {
+            id: true,
+            phone: true,
+            kind: true,
+            status: true,
+            deletedAt: true,
+          },
+        },
       },
     });
-    if (!customer || customer.user.deletedAt) {
+    if (
+      !customer ||
+      customer.user.deletedAt ||
+      customer.user.kind !== "customer"
+    ) {
       throw new NotFoundException("Customer not found.");
     }
     if (customer.user.status !== "active") {
@@ -179,7 +377,9 @@ export class RecoveryService {
     });
 
     const actorIds = [
-      ...new Set(rows.map((r) => r.createdBy).filter((id): id is string => Boolean(id))),
+      ...new Set(
+        rows.map((r) => r.createdBy).filter((id): id is string => Boolean(id)),
+      ),
     ];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({
@@ -198,7 +398,9 @@ export class RecoveryService {
       customerName: row.user.customerProfile?.fullName ?? null,
       customerPhone: row.user.phone,
       createdBy: row.createdBy,
-      createdByName: row.createdBy ? (actorName.get(row.createdBy) ?? null) : null,
+      createdByName: row.createdBy
+        ? (actorName.get(row.createdBy) ?? null)
+        : null,
       note: row.note,
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
@@ -276,10 +478,21 @@ export class RecoveryService {
       });
       if (claimed.count !== 1) throw new BadRequestException(USED_TOKEN);
 
-      await tx.user.update({
-        where: { id: row.userId },
+      const updated = await tx.user.updateMany({
+        where: {
+          id: row.userId,
+          kind: "customer",
+          status: "active",
+          deletedAt: null,
+        },
         data: { passwordHash: pinHash },
       });
+
+      if (updated.count !== 1) {
+        throw new ForbiddenException(
+          "Account unavailable. Please contact Throne of Grace.",
+        );
+      }
       await tx.session.updateMany({
         where: { userId: row.userId, revokedAt: null },
         data: { revokedAt: new Date() },
@@ -418,7 +631,9 @@ export class RecoveryService {
     });
 
     const actorIds = [
-      ...new Set(rows.map((r) => r.createdBy).filter((id): id is string => Boolean(id))),
+      ...new Set(
+        rows.map((r) => r.createdBy).filter((id): id is string => Boolean(id)),
+      ),
     ];
     const actors = actorIds.length
       ? await this.prisma.user.findMany({
@@ -437,7 +652,9 @@ export class RecoveryService {
       staffName: row.user.staffProfile?.fullName ?? null,
       staffIdentifier: row.user.email ?? row.user.phone,
       createdBy: row.createdBy,
-      createdByName: row.createdBy ? (actorName.get(row.createdBy) ?? null) : null,
+      createdByName: row.createdBy
+        ? (actorName.get(row.createdBy) ?? null)
+        : null,
       note: row.note,
       createdAt: row.createdAt.toISOString(),
       expiresAt: row.expiresAt.toISOString(),
@@ -447,7 +664,9 @@ export class RecoveryService {
   }
 
   async revokeStaffPasswordReset(id: string, actorUserId: string) {
-    const row = await this.prisma.staffPasswordResetToken.findUnique({ where: { id } });
+    const row = await this.prisma.staffPasswordResetToken.findUnique({
+      where: { id },
+    });
     if (!row) throw new NotFoundException("Reset authorization not found.");
     if (row.consumedAt) {
       throw new BadRequestException("This reset has already been completed.");
@@ -479,7 +698,11 @@ export class RecoveryService {
    * staff member and revokes all sessions. TOTP enrollment is preserved so the
    * authenticator remains required at sign-in.
    */
-  async consumeStaffPasswordReset(rawToken: string, newPassword: string, ip?: string) {
+  async consumeStaffPasswordReset(
+    rawToken: string,
+    newPassword: string,
+    ip?: string,
+  ) {
     const strength = validatePasswordStrength(newPassword);
     if (strength) throw new BadRequestException(strength);
 
@@ -555,7 +778,7 @@ export class RecoveryService {
     return {
       ok: true as const,
       message:
-        "For your security, admin password recovery is completed after identity verification. Contact the super administrator/owner (or use the server-side break-glass process if the first administrator is locked out). Your authenticator remains required after password recovery.",
+        "If an account exists for the email provided, a password reset link has been sent. You can also contact support for assistance if needed.",
     };
   }
 
@@ -631,7 +854,9 @@ export class RecoveryService {
 
     const phones = [
       pick("phone") ?? process.env.BUSINESS_CONTACT_PHONE?.trim() ?? null,
-      pick("altPhone") ?? process.env.BUSINESS_CONTACT_PHONE_ALT?.trim() ?? null,
+      pick("altPhone") ??
+        process.env.BUSINESS_CONTACT_PHONE_ALT?.trim() ??
+        null,
     ].filter((v): v is string => Boolean(v));
 
     return {
@@ -643,14 +868,14 @@ export class RecoveryService {
 
   /**
    * Public recovery-intent endpoint helper. It intentionally does not read
-   * or store the phone number and always yields the same guidance, so it
-   * cannot be used to discover which numbers have accounts.
+   * or store the email and always yields the same guidance, so it cannot be
+   * used to discover which emails have accounts.
    */
   recoveryRequestGuidance() {
     return {
       ok: true as const,
       message:
-        "For your security, PIN recovery is completed by our team after identity verification. Please contact the numbers shown and have your registered phone number and delivery address ready.",
+        "If an account exists for the email provided, a password reset link has been sent.",
     };
   }
 

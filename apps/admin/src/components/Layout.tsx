@@ -8,7 +8,6 @@ import {
   LogOut,
   Menu,
   X,
-  KeyRound,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import NotificationsBell from "./NotificationsBell";
@@ -92,8 +91,6 @@ function NavGroups({
         <>
           <p className="admin-nav-section mt-2">Customers</p>
           <NavItem to="/customers" icon={Users} label="Customers" onNavigate={onNavigate} />
-          <p className="admin-nav-section mt-2">Security</p>
-          <NavItem to="/recovery" icon={KeyRound} label="Recovery" onNavigate={onNavigate} />
         </>
       ) : null}
 
@@ -137,7 +134,6 @@ export default function Layout() {
     if (p.startsWith("/requests/")) return "Order details";
     if (p.startsWith("/customers/")) return "Customer details";
     if (p.startsWith("/customers")) return "Customers";
-    if (p.startsWith("/recovery")) return "Recovery";
     if (p.startsWith("/team")) return "Account";
     if (p.startsWith("/settings")) return "Settings";
     return "Operations";

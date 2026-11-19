@@ -185,10 +185,16 @@ export class RequestService {
   }
 
   /** Guest-link candidates after OTP verification — surfaced for CONFIRMATION, never auto-linked (v1.2 §1.4.2). */
-  async findLinkCandidates(phone: string): Promise<
+  async findLinkCandidates(phone: string | null | undefined): Promise<
     Array<{ id: string; reference: string; type: RequestType; createdAt: Date; status: string }>
   > {
-    const normalized = normalizeNgPhone(phone);
+    if (!phone) return [];
+    let normalized: string;
+    try {
+      normalized = normalizeNgPhone(phone);
+    } catch {
+      return [];
+    }
     return this.prisma.serviceRequest.findMany({
       where: { contactPhone: normalized, customerId: null, deletedAt: null },
       select: { id: true, reference: true, type: true, createdAt: true, status: true },

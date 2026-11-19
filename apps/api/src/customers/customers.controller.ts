@@ -1,6 +1,7 @@
-import { Controller, Delete, Get, NotFoundException, Param, Query } from "@nestjs/common";
+import { Controller, Delete, Get, NotFoundException, Param, Query, Req } from "@nestjs/common";
 import { PrismaClient } from "@prisma/client";
 import { RequireAudience, RequirePermission } from "../auth/auth.guard";
+import type { AuthedRequest } from "../auth/auth.guard";
 import { normalizeNgPhone } from "../common/phone";
 
 /**
@@ -159,7 +160,7 @@ export class CustomersController {
   @Delete(":id")
   @RequireAudience("admin")
   @RequirePermission("customer:suspend")
-  async remove(@Param("id") id: string) {
+  async remove(@Param("id") id: string, @Req() req: AuthedRequest) {
     const customer = await this.prisma.customerProfile.findUnique({
       where: { id },
       select: { id: true, userId: true, user: { select: { deletedAt: true } } },
@@ -176,6 +177,15 @@ export class CustomersController {
       await tx.session.updateMany({
         where: { userId: customer.userId, revokedAt: null },
         data: { revokedAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: req.user?.id ?? null,
+          action: "customer.deleted",
+          entityType: "customer",
+          entityId: customer.id,
+          after: { status: "deleted", permanent: true },
+        },
       });
     });
 

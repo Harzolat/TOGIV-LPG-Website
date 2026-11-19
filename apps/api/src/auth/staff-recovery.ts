@@ -26,7 +26,7 @@ export type StaffRecoverySource = "console" | "break_glass";
 export interface StaffRecoveryTarget {
   id: string;
   email: string | null;
-  phone: string;
+  phone: string | null;
   fullName: string;
   totpEnrolled: boolean;
 }
@@ -90,7 +90,7 @@ async function loadTarget(
   return {
     id: user.id,
     email: user.email,
-    phone: user.phone,
+    phone: user.phone ?? null,
     fullName: user.staffProfile?.fullName ?? "—",
     totpEnrolled: Boolean(user.staffProfile?.totpEnrolledAt),
     passwordHash: user.passwordHash,

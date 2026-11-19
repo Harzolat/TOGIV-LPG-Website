@@ -193,18 +193,20 @@ export default function Settings() {
 
   async function removeStaff(member: StaffMember) {
     if (member.id === user?.id) return;
+    const label = member.email || member.phone || member.fullName;
     const ok = window.confirm(
-      `Delete admin/staff account for ${member.fullName} (${member.phone})? This will revoke access.`,
+      `Permanently delete the admin/staff account for ${member.fullName} (${label})? Access will be revoked and this action cannot be undone. The account's email/phone details can be used to create a new account afterward.`,
     );
     if (!ok) return;
     setDeletingId(member.id);
     try {
       await api(`/admin/staff/${member.id}`, { method: "DELETE" });
-      toast({ message: "Account deleted.", tone: "success" });
+      toast({ message: "Account permanently deleted.", tone: "success" });
       await loadStaff();
     } catch (err) {
       toast({
-        message: err instanceof ApiError ? err.message : "Could not delete account.",
+        message:
+          err instanceof ApiError ? err.message : "Could not permanently delete account.",
         tone: "error",
       });
     } finally {
@@ -227,7 +229,6 @@ export default function Settings() {
           <Row label="Phone number" value={user?.phone ?? "—"} />
           <Row label="Email" value={user?.email ?? "—"} />
           <Row label="Roles" value={user?.roles?.length ? user.roles.join(", ") : "—"} />
-          <Row label="Two-factor authentication" value={user?.totpEnrolled ? "Enabled (TOTP)" : "Not set up"} />
         </dl>
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t pt-4" style={{ borderColor: "var(--border)" }}>
           <Link to="/add-admin" className="t-btn t-btn--secondary t-btn--sm">
@@ -239,7 +240,7 @@ export default function Settings() {
       {isSuperAdmin ? (
         <Card className="mt-5" padded title="Admin accounts">
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Admin and staff accounts created for this console. You can review details and remove accounts when needed.
+            Admin and staff accounts created for this console. You can review details and permanently delete accounts when needed (deleted account email/phone details can be reused for a new account).
           </p>
 
           <div className="mt-4">
@@ -286,12 +287,11 @@ export default function Settings() {
                             ) : null}
                           </p>
                           <p className="mt-0.5 break-all text-xs" style={{ color: "var(--text-muted)" }}>
-                            {member.phone}
-                            {member.email ? ` · ${member.email}` : ""}
+                            {member.email ?? "—"}
+                            {member.phone ? ` · ${member.phone}` : ""}
                           </p>
                           <p className="mt-1 text-xs" style={{ color: "var(--text-muted)" }}>
                             Roles: {member.roles?.length ? member.roles.join(", ") : "—"}
-                            {" · "}2FA: {member.totpEnrolled ? "enabled" : "not set up yet"}
                             {member.lastLoginAt ? ` · last sign-in ${new Date(member.lastLoginAt).toLocaleString()}` : ""}
                           </p>
                         </div>
@@ -303,7 +303,7 @@ export default function Settings() {
                               loading={deletingId === member.id}
                               onClick={() => void removeStaff(member)}
                             >
-                              Delete
+                              Permanently delete
                             </Button>
                           ) : null}
                         </div>
